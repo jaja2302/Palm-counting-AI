@@ -1,6 +1,7 @@
 """
-Build Python sidecar untuk Tauri.
-Menggunakan PyInstaller untuk bundle infer_worker.py sebagai standalone executable.
+Build Python sidecar untuk Tauri menggunakan Nuitka.
+FULL SUPPORT: YOLO + Ultralytics + GPU (CUDA)
+FIX: Completely disable anti-bloat plugin via environment variable
 """
 import os
 import sys
@@ -17,7 +18,6 @@ def get_target_triple():
     )
     if result.returncode == 0:
         return result.stdout.strip()
-    # Fallback untuk Windows
     if sys.platform == "win32":
         return "x86_64-pc-windows-msvc"
     elif sys.platform == "darwin":
@@ -25,202 +25,301 @@ def get_target_triple():
     else:
         return "x86_64-unknown-linux-gnu"
 
-def build_sidecar(script_name, output_name_base):
-    """Build a single Python sidecar script"""
+def ensure_nuitka():
+    """Ensure Nuitka installed"""
+    try:
+        result = subprocess.run(
+            [sys.executable, "-m", "nuitka", "--version"],
+            capture_output=True,
+            text=True
+        )
+        print(f"Nuitka detected: {result.stdout.strip()}")
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        print("Installing Nuitka...")
+        subprocess.run(
+            [sys.executable, "-m", "pip", "install", "nuitka"],
+            check=True
+        )
+        print("Nuitka installed successfully")
+
+def get_package_data_dir(package_name):
+    """Get the data directory for a package"""
+    try:
+        import importlib.util
+        spec = importlib.util.find_spec(package_name)
+        if spec and spec.origin:
+            return str(Path(spec.origin).parent)
+    except:
+        pass
+    return None
+
+def build_sidecar_nuitka(script_name, output_name_base):
+    """Build a single Python sidecar script using Nuitka"""
     script_dir = Path(__file__).parent
-    src_tauri_dir = script_dir.parent  # scripts/ -> src-tauri/
-    python_ai_dir = src_tauri_dir / "python_ai"  # python_ai sekarang di src-tauri/
+    src_tauri_dir = script_dir.parent
+    python_ai_dir = src_tauri_dir / "python_ai"
     binaries_dir = src_tauri_dir / "binaries"
     
-    # Buat direktori binaries jika belum ada
     binaries_dir.mkdir(exist_ok=True)
     
-    # Path ke script
     worker_script = python_ai_dir / script_name
     if not worker_script.exists():
         print(f"ERROR: {worker_script} tidak ditemukan!")
         return False
     
-    print(f"Building Python sidecar dari {worker_script}")
+    print(f"Building Python sidecar dengan Nuitka dari {worker_script}")
     
-    # Install PyInstaller jika belum ada
-    try:
-        import PyInstaller
-    except ImportError:
-        print("Installing PyInstaller...")
-        subprocess.run([sys.executable, "-m", "pip", "install", "pyinstaller"], check=True)
-    
-    # Build dengan PyInstaller
     target_triple = get_target_triple()
     output_name = f"{output_name_base}-{target_triple}"
     
     print(f"Target triple: {target_triple}")
     print(f"Output name: {output_name}")
     
-    # PyInstaller command
-    # Note: --collect-all akan bundle semua submodules, penting untuk PyTorch/CUDA
-    # WARNING: --collect-all ultralytics causes crash (exit code 3221226505) on Windows
-    # Solution: Use specific --hidden-import instead of --collect-all for ultralytics
-    # Gunakan --workpath dan --distpath untuk mengarahkan artifacts ke temp location
-    # Ini membantu mencegah Tauri watch mode dari mendeteksi perubahan
-    import tempfile
-    temp_build_dir = Path(tempfile.gettempdir()) / "pyinstaller_build" / f"infer_worker_{os.getpid()}"
-    temp_build_dir.mkdir(parents=True, exist_ok=True)
-    
-    # Determine hidden imports based on script
-    hidden_imports = []
-    collect_all = []
-    
-    if script_name == "infer_worker.py":
-        # For model conversion, need PyTorch/Ultralytics
-        # NOTE: --collect-all ultralytics causes crash (exit code 3221226505)
-        # Use specific hidden imports instead of collect-all for ultralytics
-        hidden_imports = [
-            "--hidden-import", "ultralytics",
-            "--hidden-import", "ultralytics.models",
-            "--hidden-import", "ultralytics.models.yolo",
-            "--hidden-import", "ultralytics.models.yolo.detect",
-            "--hidden-import", "ultralytics.utils",
-            "--hidden-import", "torch",
-            "--hidden-import", "torchvision",
-            "--hidden-import", "PIL",
-            "--hidden-import", "PIL.Image",
-            "--hidden-import", "numpy",
-            "--hidden-import", "cv2",
-            "--hidden-import", "geojson",
-            "--hidden-import", "shapely",
-            "--hidden-import", "shapely.geometry",
-            "--hidden-import", "geopandas",
-            "--hidden-import", "fastkml",
-        ]
-        # Only collect-all for torch/torchvision (ultralytics removed to prevent crash)
-        collect_all = [
-            "--collect-all", "torch",
-            "--collect-all", "torchvision",
-        ]
-    elif script_name == "convert_tiff.py":
-        # For TIFF conversion, only need PIL
-        hidden_imports = [
-            "--hidden-import", "PIL",
-            "--hidden-import", "PIL.Image",
-        ]
-        collect_all = []
-    
-    pyinstaller_cmd = [
-        sys.executable, "-m", "PyInstaller",
-        "--onefile",
-        "--name", output_name_base,
-        "--workpath", str(temp_build_dir / "build"),  # Build artifacts ke temp
-        "--distpath", str(temp_build_dir / "dist"),   # Dist artifacts ke temp
-        "--specpath", str(temp_build_dir),            # Spec file ke temp (PENTING: cegah Tauri watch mode)
-        *hidden_imports,
-        *[item for sublist in [[f"--collect-all", mod] for mod in [x for i, x in enumerate(collect_all) if i % 2 == 1]] for item in sublist],
-        "--noconsole",  # Hide console window (optional, bisa dihapus untuk debugging)
-        str(worker_script)
+    # Nuitka build command - Base options
+    nuitka_cmd = [
+        sys.executable, "-m", "nuitka",
+        "--standalone",  # Create standalone distribution
+        "--onefile",  # Create single executable
+        "--assume-yes-for-downloads",  # Auto-download dependencies
+        "--output-filename=" + (output_name + ".exe" if sys.platform == "win32" else output_name),
+        "--output-dir=" + str(binaries_dir),
+        
+        # ============================================
+        # CRITICAL: Disable ALL plugins to avoid subprocess crashes
+        # ============================================
+        "--plugin-no-detection",  # Disable automatic plugin detection
     ]
     
-    print(f"Running: {' '.join(pyinstaller_cmd)}")
+    # Windows-specific options
+    if sys.platform == "win32":
+        nuitka_cmd.extend([
+            "--windows-console-mode=disable",  # No console window
+        ])
     
-    # Run PyInstaller
+    # Script-specific options
+    if script_name == "infer_worker.py":
+        print("  Configuring for YOLO + Ultralytics + GPU (CUDA)...")
+        print("  ⚠️  Disabling ALL plugins to avoid subprocess crash with path spaces")
+        
+        nuitka_cmd.extend([
+            # ============================================
+            # PyTorch + CUDA Support (CRITICAL for GPU)
+            # ============================================
+            "--include-package=torch",
+            "--include-package=torch.nn",
+            "--include-package=torch.cuda",
+            "--include-package=torch._C",  # C extensions (CRITICAL!)
+            "--include-package=torch.backends",
+            "--include-package=torch.backends.cuda",
+            "--include-package=torch.backends.cudnn",  # cuDNN support
+            "--include-package=torch.distributed",
+            "--include-package=torch.utils",
+            "--include-package=torch.utils.data",
+            "--include-package=torch.autograd",
+            "--include-package=torch.nn.functional",
+            
+            # TorchVision
+            "--include-package=torchvision",
+            "--include-package=torchvision.transforms",
+            "--include-package=torchvision.models",
+            
+            # ============================================
+            # Ultralytics + YOLO (CRITICAL)
+            # ============================================
+            "--include-package=ultralytics",
+            "--include-package=ultralytics.models",
+            "--include-package=ultralytics.models.yolo",
+            "--include-package=ultralytics.models.yolo.detect",
+            "--include-package=ultralytics.models.yolo.segment",
+            "--include-package=ultralytics.engine",
+            "--include-package=ultralytics.engine.predictor",
+            "--include-package=ultralytics.engine.results",
+            "--include-package=ultralytics.utils",
+            "--include-package=ultralytics.data",
+            "--include-package=ultralytics.nn",
+            
+            # ============================================
+            # Image Processing
+            # ============================================
+            "--include-package=PIL",
+            "--include-package=cv2",
+            "--include-package=numpy",
+            
+            # ============================================
+            # Geo Libraries
+            # ============================================
+            "--include-package=geojson",
+            "--include-package=shapely",
+            "--include-package=geopandas",
+            "--include-package=fastkml",
+            
+            # ============================================
+            # Utilities
+            # ============================================
+            "--include-package=yaml",
+            "--include-package=tqdm",
+            "--include-package=pathlib",
+            
+            # ============================================
+            # Follow Imports (Auto-detect submodules)
+            # ============================================
+            "--follow-import-to=torch",
+            "--follow-import-to=torchvision",
+            "--follow-import-to=ultralytics",
+            "--follow-import-to=numpy",
+            "--follow-import-to=cv2",
+            "--follow-import-to=PIL",
+        ])
+        
+        # ============================================
+        # CRITICAL: Include Ultralytics Data Files
+        # ============================================
+        ultralytics_dir = get_package_data_dir("ultralytics")
+        if ultralytics_dir:
+            print(f"  Found ultralytics at: {ultralytics_dir}")
+            nuitka_cmd.extend([
+                f"--include-data-dir={ultralytics_dir}=ultralytics",
+            ])
+        
+        # ============================================
+        # CRITICAL: Include PyTorch CUDA DLLs (Windows)
+        # ============================================
+        if sys.platform == "win32":
+            torch_dir = get_package_data_dir("torch")
+            if torch_dir:
+                torch_lib = Path(torch_dir) / "lib"
+                if torch_lib.exists():
+                    print(f"  Found PyTorch CUDA libs at: {torch_lib}")
+                    # Include semua DLL dari torch/lib
+                    dll_count = 0
+                    for dll_file in torch_lib.glob("*.dll"):
+                        nuitka_cmd.append(f"--include-data-files={dll_file}=torch/lib/{dll_file.name}")
+                        dll_count += 1
+                    print(f"  Including {dll_count} CUDA DLLs")
+        
+    elif script_name == "convert_tiff.py":
+        print("  Adding PIL dependencies...")
+        nuitka_cmd.extend([
+            "--include-package=PIL",
+            "--follow-import-to=PIL",
+        ])
+    
+    # Add the script at the end
+    nuitka_cmd.append(str(worker_script))
+    
+    print(f"\nRunning Nuitka...")
+    if script_name == "infer_worker.py":
+        print(f"  ⚠️  First build: 20-30 minutes (PyTorch + CUDA + no plugin optimizations)")
+        print(f"  ⚠️  File size may be larger (~600MB-1.2GB)")
+        print(f"  ℹ️  Plugin disabled to avoid subprocess crash")
+    else:
+        print(f"  Expected time: 2-5 minutes...")
+    
+    print(f"\n  Full command saved for debugging...")
+    debug_cmd_file = binaries_dir / f"nuitka_cmd_{output_name_base}.txt"
+    debug_cmd_file.write_text(' \\\n  '.join(nuitka_cmd), encoding='utf-8')
+    print(f"  Command file: {debug_cmd_file}")
+    
+    # Set environment for better output
+    env = os.environ.copy()
+    env["PYTHONIOENCODING"] = "utf-8"
+    
+    # ============================================
+    # CRITICAL: Disable anti-bloat via environment variable
+    # ============================================
+    env["NUITKA_PLUGIN_ANTI_BLOAT_DISABLE"] = "1"
+    
+    # Run Nuitka
+    print("\n" + "="*70)
     result = subprocess.run(
-        pyinstaller_cmd,
-        cwd=python_ai_dir,
+        nuitka_cmd,
+        cwd=str(python_ai_dir),
+        env=env,
         check=False
     )
+    print("="*70 + "\n")
     
     if result.returncode != 0:
-        print("ERROR: PyInstaller build failed!")
+        print(f"\n❌ ERROR: Nuitka build failed with return code {result.returncode}!")
+        print("\nThis is a known issue with Nuitka + Python path containing spaces.")
+        print("\n🔧 ULTIMATE SOLUTION:")
+        print("   Install Python in a path without spaces:")
+        print("   1. Download Python from python.org")
+        print("   2. Custom installation to: C:\\Python311")
+        print("   3. Install dependencies: pip install -r requirements.txt")
+        print("   4. Build from that Python: C:\\Python311\\python.exe src-tauri/scripts/build_python_sidecar.py")
+        print(f"\nDebug command saved to: {debug_cmd_file}")
         return False
     
-    # Move hasil build ke binaries directory
-    # Build output sekarang di temp directory
-    temp_dist_dir = temp_build_dir / "dist"
+    # Check if output exists
     if sys.platform == "win32":
-        build_output = temp_dist_dir / f"{output_name_base}.exe"
+        final_output = binaries_dir / f"{output_name}.exe"
     else:
-        build_output = temp_dist_dir / output_name_base
+        final_output = binaries_dir / output_name
     
-    if not build_output.exists():
-        print(f"ERROR: Build output tidak ditemukan: {build_output}")
-        print(f"  Dist directory contents: {list(temp_dist_dir.iterdir()) if temp_dist_dir.exists() else 'not found'}")
-        # Cleanup temp directory
-        try:
-            shutil.rmtree(temp_build_dir)
-        except:
-            pass
+    if not final_output.exists():
+        print(f"ERROR: Build output tidak ditemukan: {final_output}")
+        print(f"  Expected: {final_output}")
+        if binaries_dir.exists():
+            print(f"  Binaries dir contents:")
+            for item in binaries_dir.iterdir():
+                print(f"    - {item.name} ({item.stat().st_size / (1024*1024):.1f} MB)")
         return False
     
-    # Rename sesuai target triple
-    final_output = binaries_dir / output_name
-    if sys.platform == "win32" and not final_output.suffix:
-        final_output = final_output.with_suffix(".exe")
-    
-    print(f"Copying {build_output} -> {final_output}")
-    shutil.copy2(build_output, final_output)
-    
-    # Cleanup PyInstaller artifacts IMMEDIATELY to prevent Tauri watch mode from detecting changes
-    # Hapus .spec file terlebih dahulu (ini yang paling sering trigger rebuild)
-    # Note: Dengan --specpath, spec file seharusnya sudah di temp, tapi cek juga di python_ai_dir untuk safety
-    spec_file = python_ai_dir / f"{output_name_base}.spec"
-    if spec_file.exists():
-        try:
-            spec_file.unlink()
-            print(f"Cleaned up {output_name_base}.spec from python_ai directory")
-        except Exception as e:
-            print(f"Warning: Could not remove spec file: {e}")
-    
-    # Cleanup temp build directory
-    try:
-        shutil.rmtree(temp_build_dir)
-        print("Cleaned up temp build directory")
-    except Exception as e:
-        print(f"Warning: Could not remove temp build directory: {e}")
-    
-    # Juga cleanup jika ada build/dist di python_ai_dir (untuk safety)
-    build_dir = python_ai_dir / "build"
-    if build_dir.exists():
-        try:
-            shutil.rmtree(build_dir)
-            print("Cleaned up build directory in python_ai")
-        except Exception as e:
-            print(f"Warning: Could not remove build directory: {e}")
-    
-    dist_dir = python_ai_dir / "dist"
-    if dist_dir.exists():
-        try:
-            shutil.rmtree(dist_dir)
-            print("Cleaned up dist directory in python_ai")
-        except Exception as e:
-            print(f"Warning: Could not remove dist directory: {e}")
-    
-    print(f"✓ Python sidecar berhasil dibuild: {final_output}")
+    print(f"✓ Python sidecar berhasil dibuild dengan Nuitka: {final_output}")
     print(f"  Size: {final_output.stat().st_size / (1024*1024):.2f} MB")
     
     return True
 
 def build_python_sidecar():
-    """Build all Python sidecars"""
-    print("=" * 60)
-    print("Building Python sidecars...")
-    print("=" * 60)
+    """Build all Python sidecars using Nuitka"""
+    print("=" * 70)
+    print("Building Python sidecars with Nuitka")
+    print("FULL SUPPORT: YOLO + Ultralytics + GPU (CUDA)")
+    print("=" * 70)
     
-    # Build infer_worker (model conversion)
-    print("\n[1/2] Building infer_worker (model conversion)...")
-    success1 = build_sidecar("infer_worker.py", "infer_worker")
+    # Ensure Nuitka installed
+    print("\nChecking Nuitka installation...")
+    try:
+        ensure_nuitka()
+    except Exception as e:
+        print(f"ERROR: Failed to install Nuitka: {e}")
+        return False
     
-    # Build convert_tiff (TIFF RGBPalette conversion)
-    print("\n[2/2] Building convert_tiff (TIFF conversion)...")
-    success2 = build_sidecar("convert_tiff.py", "convert_tiff")
+    # Build convert_tiff first (quick test)
+    print("\n" + "=" * 70)
+    print("[1/2] Building convert_tiff (TIFF conversion)...")
+    print("=" * 70)
+    success2 = build_sidecar_nuitka("convert_tiff.py", "convert_tiff")
+    
+    if not success2:
+        print("\n⚠️  convert_tiff failed. Stopping build.")
+        return False
+    
+    # Build infer_worker (long build due to PyTorch + CUDA)
+    print("\n" + "=" * 70)
+    print("[2/2] Building infer_worker (YOLO + GPU)...")
+    print("=" * 70)
+    success1 = build_sidecar_nuitka("infer_worker.py", "infer_worker")
     
     if success1 and success2:
-        print("\n" + "=" * 60)
-        print("✓ All sidecars built successfully!")
-        print("=" * 60)
+        print("\n" + "=" * 70)
+        print("✓ All sidecars built successfully with Nuitka!")
+        print("=" * 70)
+        print("\n📋 Important Notes:")
+        print("  • Executable includes CUDA support for GPU inference")
+        print("  • File size may be large due to disabled optimizations")
+        print("  • Executable will auto-detect GPU on target PC")
         return True
     else:
-        print("\n" + "=" * 60)
+        print("\n" + "=" * 70)
         print("✗ Some sidecars failed to build!")
-        print("=" * 60)
+        if not success1:
+            print("  - infer_worker: FAILED")
+        if not success2:
+            print("  - convert_tiff: FAILED")
+        print("\n💡 Recommendation: Install Python in C:\\Python311 (no spaces)")
+        print("=" * 70)
         return False
 
 if __name__ == "__main__":

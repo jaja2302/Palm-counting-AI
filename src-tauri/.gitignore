@@ -11,3 +11,4 @@
 /python_ai/dist/
 /python_ai/__pycache__/
 /python_ai/*.spec
+/binaries/
