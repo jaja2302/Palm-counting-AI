@@ -5,6 +5,7 @@ Tauri + React + TypeScript. Inference via Python sidecar (YOLO).
 ## Development
 
 ```bash
+conda activate yolov9
 npm run tauri:dev
 ```
 

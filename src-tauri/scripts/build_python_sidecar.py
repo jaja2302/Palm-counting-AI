@@ -59,6 +59,8 @@ def build_sidecar(script_name, output_name_base):
     
     # PyInstaller command
     # Note: --collect-all akan bundle semua submodules, penting untuk PyTorch/CUDA
+    # WARNING: --collect-all ultralytics causes crash (exit code 3221226505) on Windows
+    # Solution: Use specific --hidden-import instead of --collect-all for ultralytics
     # Gunakan --workpath dan --distpath untuk mengarahkan artifacts ke temp location
     # Ini membantu mencegah Tauri watch mode dari mendeteksi perubahan
     import tempfile
@@ -71,16 +73,28 @@ def build_sidecar(script_name, output_name_base):
     
     if script_name == "infer_worker.py":
         # For model conversion, need PyTorch/Ultralytics
+        # NOTE: --collect-all ultralytics causes crash (exit code 3221226505)
+        # Use specific hidden imports instead of collect-all for ultralytics
         hidden_imports = [
             "--hidden-import", "ultralytics",
+            "--hidden-import", "ultralytics.models",
+            "--hidden-import", "ultralytics.models.yolo",
+            "--hidden-import", "ultralytics.models.yolo.detect",
+            "--hidden-import", "ultralytics.utils",
             "--hidden-import", "torch",
             "--hidden-import", "torchvision",
             "--hidden-import", "PIL",
             "--hidden-import", "PIL.Image",
             "--hidden-import", "numpy",
+            "--hidden-import", "cv2",
+            "--hidden-import", "geojson",
+            "--hidden-import", "shapely",
+            "--hidden-import", "shapely.geometry",
+            "--hidden-import", "geopandas",
+            "--hidden-import", "fastkml",
         ]
+        # Only collect-all for torch/torchvision (ultralytics removed to prevent crash)
         collect_all = [
-            "--collect-all", "ultralytics",
             "--collect-all", "torch",
             "--collect-all", "torchvision",
         ]
