@@ -356,8 +356,9 @@ fn handle_post_processing(
     // Generate annotated image if requested
     if config.save_annotated.to_lowercase() == "true" {
         let line_width: u32 = config.line_width.parse().unwrap_or(3);
-        let annotated_path = output_path.join("annotated");
-        if let Ok(_) = annotate::save_annotated(image_path, detections, &annotated_path, line_width) {
+        // Simpan annotated images di folder output_path (satu level dengan SHP/GeoJSON),
+        // agar perilaku sama dengan versi Python lama.
+        if let Ok(_) = annotate::save_annotated(image_path, detections, &output_path, line_width) {
             eprintln!("  ✓ Annotated image saved");
         }
     }
