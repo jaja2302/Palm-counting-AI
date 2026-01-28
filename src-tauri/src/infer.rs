@@ -11,6 +11,12 @@ fn get_infer_worker_path() -> (std::path::PathBuf, bool) {
     // Try sidecar executable first
     if let Ok(exe) = std::env::current_exe() {
         if let Some(exe_dir) = exe.parent() {
+            // Check for embedded Python script next to executable (production with portable Python)
+            let embedded_script = exe_dir.join("python_ai").join("infer_worker.py");
+            if embedded_script.exists() {
+                return (embedded_script, true);
+            }
+
             // Check in src-tauri/binaries/ (dev mode)
             if let Some(target_dir) = exe_dir.parent() {
                 if let Some(src_tauri_dir) = target_dir.parent() {
@@ -148,7 +154,28 @@ pub fn run_processing_files(
         .map_err(|e| format!("Failed to serialize files: {}", e))?;
 
     let mut cmd = if use_python {
-        let mut c = Command::new("python");
+        // Prefer embedded portable Python next to the executable (production),
+        // fallback to system "python" in PATH (dev).
+        let python_cmd = if let Ok(exe) = std::env::current_exe() {
+            if let Some(exe_dir) = exe.parent() {
+                let candidate = if cfg!(target_os = "windows") {
+                    exe_dir.join("python").join("python.exe")
+                } else {
+                    exe_dir.join("python").join("python")
+                };
+                if candidate.exists() {
+                    candidate
+                } else {
+                    std::path::PathBuf::from("python")
+                }
+            } else {
+                std::path::PathBuf::from("python")
+            }
+        } else {
+            std::path::PathBuf::from("python")
+        };
+
+        let mut c = Command::new(python_cmd);
         c.arg("-u").arg(&worker_path);
         c.env("PYTHONUNBUFFERED", "1");
         c

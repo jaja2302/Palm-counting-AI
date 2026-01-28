@@ -1,6 +1,7 @@
 mod config;
 mod infer;
 mod specs;
+mod python_manager;
 // mod yolo_onnx;  // Tidak digunakan lagi - semua inference di Python
 
 use tauri::Emitter;
@@ -20,6 +21,12 @@ use config::{
 };
 use specs::{get_realtime_usage, get_system_specs};
 use std::sync::atomic::AtomicBool;
+use std::sync::Mutex;
+use python_manager::PythonManager;
+
+struct AppState {
+    python_manager: Mutex<Option<PythonManager>>,
+}
 
 #[tauri::command]
 fn get_specs() -> Result<specs::SystemSpecs, String> {
@@ -275,6 +282,27 @@ fn cancel_processing() {
     PROCESSING_CANCEL.store(true, std::sync::atomic::Ordering::Relaxed);
 }
 
+#[tauri::command]
+fn setup_python_environment(
+    app_handle: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
+    let mgr = PythonManager::new(&app_handle)?;
+
+    // Jalankan setup (sinkron) dan emit progress ke frontend
+    let app_clone = app_handle.clone();
+    mgr.setup(|msg| {
+        let _ = app_clone.emit("setup-progress", msg.clone());
+    })?;
+
+    // Simpan manager di state (kalau nanti mau dipakai utk ambil python_exe)
+    if let Ok(mut guard) = state.python_manager.lock() {
+        *guard = Some(mgr);
+    }
+
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -282,6 +310,9 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
+        .manage(AppState {
+            python_manager: Mutex::new(None),
+        })
         .invoke_handler(tauri::generate_handler![
             get_specs,
             get_realtime_usage_cmd,
@@ -297,6 +328,7 @@ pub fn run() {
             remove_tiff_path_cmd,
             run_processing_cmd,
             cancel_processing,
+            setup_python_environment,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

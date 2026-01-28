@@ -17,7 +17,6 @@ import re
 import sys
 import json
 import gc
-import time
 from pathlib import Path
 from PIL import Image
 import cv2

@@ -197,13 +197,6 @@ def build_sidecar_nuitka(script_name, output_name_base):
                         dll_count += 1
                     print(f"  Including {dll_count} CUDA DLLs")
         
-    elif script_name == "convert_tiff.py":
-        print("  Adding PIL dependencies...")
-        nuitka_cmd.extend([
-            "--include-package=PIL",
-            "--follow-import-to=PIL",
-        ])
-    
     # Add the script at the end
     nuitka_cmd.append(str(worker_script))
     
@@ -272,7 +265,7 @@ def build_sidecar_nuitka(script_name, output_name_base):
     return True
 
 def build_python_sidecar():
-    """Build all Python sidecars using Nuitka"""
+    """Build Python sidecars using Nuitka (only infer_worker)"""
     print("=" * 70)
     print("Building Python sidecars with Nuitka")
     print("FULL SUPPORT: YOLO + Ultralytics + GPU (CUDA)")
@@ -286,23 +279,13 @@ def build_python_sidecar():
         print(f"ERROR: Failed to install Nuitka: {e}")
         return False
     
-    # Build convert_tiff first (quick test)
-    print("\n" + "=" * 70)
-    print("[1/2] Building convert_tiff (TIFF conversion)...")
-    print("=" * 70)
-    success2 = build_sidecar_nuitka("convert_tiff.py", "convert_tiff")
-    
-    if not success2:
-        print("\n⚠️  convert_tiff failed. Stopping build.")
-        return False
-    
     # Build infer_worker (long build due to PyTorch + CUDA)
     print("\n" + "=" * 70)
-    print("[2/2] Building infer_worker (YOLO + GPU)...")
+    print("[1/1] Building infer_worker (YOLO + GPU)...")
     print("=" * 70)
     success1 = build_sidecar_nuitka("infer_worker.py", "infer_worker")
     
-    if success1 and success2:
+    if success1:
         print("\n" + "=" * 70)
         print("✓ All sidecars built successfully with Nuitka!")
         print("=" * 70)
@@ -316,8 +299,6 @@ def build_python_sidecar():
         print("✗ Some sidecars failed to build!")
         if not success1:
             print("  - infer_worker: FAILED")
-        if not success2:
-            print("  - convert_tiff: FAILED")
         print("\n💡 Recommendation: Install Python in C:\\Python311 (no spaces)")
         print("=" * 70)
         return False

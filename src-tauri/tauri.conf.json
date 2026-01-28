@@ -4,7 +4,7 @@
   "version": "1.1.23",
   "identifier": "com.jajavalentino.palm-counting-ai",
   "build": {
-    "beforeDevCommand": "npm run build:placeholder && npm run dev",
+    "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
     "beforeBuildCommand": "npm run build",
     "frontendDist": "../dist"
@@ -32,10 +32,7 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "externalBin": [
-      "binaries/infer_worker",
-      "binaries/convert_tiff"
-    ],
+    "externalBin": [],
     "resources": [
       "python_ai",
       "scripts"

@@ -100,7 +100,7 @@ def create_placeholder():
     """Create placeholders for all sidecars"""
     print("Creating placeholders for all sidecars...")
     success1 = create_placeholder_for_sidecar("infer_worker")
-    success2 = create_placeholder_for_sidecar("convert_tiff")
+    # convert_tiff sidecar is no longer used; only keep infer_worker
     
     if success1 and success2:
         print("  Note: Untuk production, jalankan 'npm run build:sidecar' untuk build sidecar yang sebenarnya")

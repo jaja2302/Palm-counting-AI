@@ -1,85 +1,100 @@
-# Quick Start - Build & Deploy
+# Quick Start - Build & Deploy (Python Portable)
 
 ## TL;DR - Alur Build
 
 ```bash
-# Development (otomatis create placeholder)
+# 1) Siapkan Python portable + dependencies (sekali saja)
+#   - Download Python 3.11 (embeddable / portable)
+#   - Extract ke: ./python/
+#   - Install dependencies ke portable Python:
+#       ./python/python.exe -m pip install -r src-tauri/python_ai/requirements.txt
+
+# 2) Development
 npm run tauri:dev
 
-# Production (build sidecar + app)
-npm run build:sidecar    # Build Python sidecar
-npm run tauri:build      # Build Tauri app
-
-# Atau build sekaligus:
-npm run build:full
+# 3) Production (build installer)
+npm run tauri:build
 ```
 
 ## Detail
 
-### Development (dengan Python terinstall)
+### Struktur folder (distribusi)
+
+Direkomendasikan struktur akhir seperti ini (di folder hasil install):
+
+```
+your-app/
+├── palm-counting-ai.exe         ← Tauri app
+├── python/                      ← Python portable (runtime)
+│   ├── python.exe
+│   ├── DLLs/
+│   ├── Lib/
+│   └── Scripts/
+├── python_ai/
+│   ├── infer_worker.py          ← YOLO + geospatial worker
+│   └── requirements.txt
+└── models/                      ← YOLO models (.pt / .onnx)
+```
+
+Rust akan:
+- Mencari `python_ai/infer_worker.py` di samping `palm-counting-ai.exe`.
+- Jika ada, ia akan mencoba menjalankan:
+  - `python/python.exe -u python_ai/infer_worker.py --infer-files ...`
+  - Jika `python/python.exe` tidak ada, fallback ke `python` di PATH (untuk dev).
+
+### Development
 
 ```bash
-# Install Python dependencies
-cd python_ai
+# 1) Pastikan dependencies ke-install (boleh pakai Python global saat dev)
+cd src-tauri/python_ai
 pip install -r requirements.txt
 
-# Run development
+# 2) Jalanin app
+cd ../../
 npm run tauri:dev
 ```
 
-**Tidak perlu build sidecar** - akan menggunakan Python script langsung.
+> Di mode dev, Rust akan menjalankan `python infer_worker.py` (menggunakan Python yang ada di PATH).
 
-### Production (bundle untuk distribusi)
+### Production (bundle dengan Python portable)
+
+1. **Download Python portable / embeddable 3.11 (x64)** dari `python.org`.
+2. Extract ke folder `python/` di root project.
+3. Install semua dependency ke portable Python:
 
 ```bash
-# 1. Build Python sidecar (PyInstaller)
-npm run build:sidecar
+./python/python.exe -m pip install -r src-tauri/python_ai/requirements.txt
+```
 
-# 2. Build Tauri app
+4. Pastikan folder berikut ikut ter-bundle di installer:
+   - `python/`
+   - `python_ai/`
+   - `models/`
+
+5. Build Tauri:
+
+```bash
 npm run tauri:build
 ```
 
-**Hasil:** Installer di `src-tauri/target/release/bundle/`
+**Hasil:** Installer di `src-tauri/target/release/bundle/` yang sudah membawa:
+- Runtime Python portable (`python/`)
+- Script worker (`python_ai/infer_worker.py`)
+- Model-model YOLO (`models/`)
 
 ## FAQ
 
 ### Q: Perlu venv?
-**A: Tidak!** PyInstaller akan bundle semua dependencies. Tidak perlu venv.
+**A: Tidak wajib.** Untuk distribusi, lebih disarankan langsung install ke Python portable (`./python/python.exe -m pip install ...`).
 
 ### Q: PC target tidak punya Python?
-**A: Tidak masalah!** Sidecar adalah standalone executable, tidak perlu Python.
+**A: Tidak masalah.** Aplikasi membawa Python portable sendiri di folder `python/`.
 
 ### Q: Ukuran file besar?
-**A: Ya, ~200-500 MB** karena include PyTorch + CUDA libraries. Ini normal untuk ML apps.
-
-### Q: Bisa build untuk Linux/Mac?
-**A: Ya!** Build sidecar di platform target masing-masing:
-```bash
-# Di Linux
-npm run build:sidecar
-npm run tauri:build
-
-# Di Mac
-npm run build:sidecar  
-npm run tauri:build
-```
+**A: Ya, tetap besar** karena membawa PyTorch + CUDA + dependencies geospatial. Ini normal untuk ML apps.
 
 ### Q: Error "worker not found"?
-**A:** 
-- Development: Pastikan `python_ai/infer_worker.py` ada
-- Production: Jalankan `npm run build:sidecar` dulu
+**A:**
+- Development: Pastikan `src-tauri/python_ai/infer_worker.py` ada dan bisa dijalankan dengan `python`.
+- Production: Pastikan folder `python_ai/` ikut terbawa di folder instalasi.
 
-## Struktur Build
-
-```
-src-tauri/
-├── binaries/
-│   └── infer_worker-<target-triple>.exe  ← Python sidecar (PyInstaller)
-├── resources/
-│   ├── python_ai/infer_worker.py         ← Fallback (dev only)
-│   └── models/                            ← YOLO models
-└── target/release/
-    └── palm-counting-ai.exe              ← Tauri app
-```
-
-Lihat [BUILD.md](./BUILD.md) untuk detail lengkap.
