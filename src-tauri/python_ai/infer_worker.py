@@ -19,12 +19,13 @@ import json
 import gc
 import time
 from pathlib import Path
-from PIL import Image
-import cv2
-import geojson
-from shapely.geometry import Point, mapping
-import geopandas as gpd
-from fastkml import kml, geometry
+# Removed geospatial libraries - now handled in Rust
+# from PIL import Image  # Only needed for image validation (moved to Rust)
+# import cv2  # Only needed for annotated images (moved to Rust)
+# import geojson  # Moved to Rust
+# from shapely.geometry import Point, mapping  # Moved to Rust
+# import geopandas as gpd  # Moved to Rust
+# from fastkml import kml, geometry  # Moved to Rust
 
 def safe_print(message: str) -> None:
     """Safe print function that works in both console and windowed modes"""
@@ -37,9 +38,13 @@ def log_error(msg: str) -> None:
     """Log error to stderr (will be captured by Rust)"""
     print(f"ERROR: {msg}", file=sys.stderr, flush=True)
 
+# Image validation moved to Rust - this function kept for backward compatibility only
 def validate_and_preprocess_image(image_path):
-    """Validate image and ensure consistent format (handles RGBPalette, etc.)"""
+    """DEPRECATED: Image validation now handled in Rust. This is kept for legacy --infer mode only."""
+    # For --infer-files mode, Rust handles validation
+    # For --infer mode (legacy), we still need basic validation
     try:
+        from PIL import Image
         with Image.open(image_path) as img:
             original_mode = img.mode
             width, height = img.size
@@ -48,14 +53,12 @@ def validate_and_preprocess_image(image_path):
             if img.mode in ['RGBA', 'LA']:
                 img = img.convert('RGB')
             elif img.mode in ['L', 'P']:
-                # Convert grayscale or palette to RGB (handles RGBPalette TIFF)
                 img = img.convert('RGB')
             elif img.mode == 'CMYK':
                 img = img.convert('RGB')
             elif img.mode != 'RGB':
                 img = img.convert('RGB')
             
-            # Save the converted image temporarily for YOLO processing
             temp_path = None
             if original_mode != 'RGB':
                 base_name = os.path.splitext(image_path)[0]
@@ -63,7 +66,6 @@ def validate_and_preprocess_image(image_path):
                 img.save(temp_path, 'JPEG', quality=95)
             
             return True, width, height, img.mode, temp_path
-                
     except Exception as e:
         log_error(f"Image validation failed: {e}")
         return False, 0, 0, None, None
@@ -737,121 +739,31 @@ def infer_files_mode() -> None:
                     })
             total_abnormal += abnormal_count
             total_normal += normal_count
-            base_name = os.path.splitext(image_path)[0]
-            tfw_file = base_name + ".tfw"
-            tfw_params = None
-            if os.path.exists(tfw_file):
-                try:
-                    with open(tfw_file) as f:
-                        params = f.readlines()
-                    tfw_params = [float(p.strip()) for p in params[:6]]
-                except Exception:
-                    pass
-            if tfw_params and detections_list:
-                labels = model.names
-                pixel_size_x, _, _, pixel_size_y, upper_left_x, upper_left_y = tfw_params
-                features = []
-                for det in detections_list:
-                    try:
-                        cx = (det["x1"] + det["x2"]) / 2
-                        cy = (det["y1"] + det["y2"]) / 2
-                        map_x = upper_left_x + cx * pixel_size_x
-                        map_y = upper_left_y + cy * pixel_size_y
-                        point = Point(map_x, map_y)
-                        class_id = det["class_id"]
-                        label = labels.get(class_id, f"class_{class_id}")
-                        features.append(geojson.Feature(
-                            geometry=mapping(point),
-                            properties={"label": label, "confidence": det["conf"], "class_id": class_id},
-                        ))
-                    except Exception:
-                        continue
-                if features:
-                    fc = geojson.FeatureCollection(features)
-                    geojson_path = os.path.join(output_dir, stem + ".geojson")
-                    counter = 1
-                    while os.path.exists(geojson_path):
-                        geojson_path = os.path.join(output_dir, f"{stem}_{counter}.geojson")
-                        counter += 1
-                    with open(geojson_path, "w") as f:
-                        geojson.dump(fc, f)
-                    safe_print(f"  ✓ GeoJSON saved: {os.path.basename(geojson_path)}")
-                    if convert_kml:
-                        try:
-                            kml_path = geojson_path.replace(".geojson", ".kml")
-                            k = kml.KML()
-                            ns = "{http://www.opengis.net/kml/2.2}"
-                            d = kml.Document(ns, "docid", "doc name", "doc description")
-                            k.append(d)
-                            for feature in fc["features"]:
-                                coords = feature["geometry"]["coordinates"]
-                                props = feature["properties"]
-                                p = kml.Placemark(ns, "id", props.get("label", "Unnamed"), "description")
-                                p.geometry = geometry.Point(coords[0], coords[1])
-                                d.append(p)
-                            with open(kml_path, "w") as f:
-                                f.write(k.to_string(prettyprint=True))
-                            safe_print(f"  ✓ KML saved: {os.path.basename(kml_path)}")
-                        except Exception as e:
-                            safe_print(f"  ✗ KML conversion failed: {e}")
-                    if convert_shp:
-                        try:
-                            shp_path = geojson_path.replace(".geojson", ".shp")
-                            gdf = gpd.read_file(geojson_path)
-                            if not gdf.empty:
-                                base_shp_path = os.path.splitext(shp_path)[0]
-                                gdf.to_file(base_shp_path, driver="ESRI Shapefile")
-                                safe_print(f"  ✓ Shapefile saved: {os.path.basename(base_shp_path)}.shp")
-                        except Exception as e:
-                            safe_print(f"  ✗ Shapefile conversion failed: {e}")
-            elif not tfw_params:
-                safe_print(
-                    "  Shapefile, KML, and GeoJSON require a .tfw file next to the TIFF "
-                    "(same base name, e.g. UPE.tfw for UPE.tif). Skipping geospatial output."
-                )
-            elif not detections_list:
-                safe_print("  No detections; skipping geospatial output.")
-            if save_annotated and results:
-                try:
-                    img = cv2.imread(image_path)
-                    if img is not None:
-                        colors = {0: (0, 0, 255), 1: (0, 255, 0), 2: (255, 0, 0)}
-                        for result in results:
-                            if result.boxes is None:
-                                continue
-                            for detection in result.boxes:
-                                x1, y1, x2, y2 = detection.xyxy[0].cpu().numpy().astype(int)
-                                cid = int(detection.cls)
-                                color = colors.get(cid, (128, 128, 128))
-                                cv2.rectangle(img, (x1, y1), (x2, y2), color, line_width)
-                                if show_labels or show_conf:
-                                    cf = float(detection.conf)
-                                    cn = model.names.get(cid, f"class_{cid}")
-                                    lbl = f"{cn}: {cf:.2f}" if (show_labels and show_conf) else (cn if show_labels else f"{cf:.2f}")
-                                    (tw, th), _ = cv2.getTextSize(lbl, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
-                                    cv2.rectangle(img, (x1, y1 - th - 10), (x1 + tw, y1), color, -1)
-                                    cv2.putText(img, lbl, (x1, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
-                        out_path = os.path.join(output_dir, f"{stem}_annotated.jpg")
-                        c = 1
-                        while os.path.exists(out_path):
-                            out_path = os.path.join(output_dir, f"{stem}_annotated_{c}.jpg")
-                            c += 1
-                        cv2.imwrite(out_path, img)
-                        safe_print(f"  ✓ Annotated image saved: {os.path.basename(out_path)}")
-                except Exception as e:
-                    safe_print(f"  ✗ Failed to save annotated image: {e}")
+            
+            # Get class names for Rust post-processing
+            class_names = {str(k): str(v) for k, v in model.names.items()}
+            
+            # Cleanup temp file if exists (image validation now in Rust, but legacy support)
             if temp_path and os.path.exists(temp_path):
                 try:
                     os.remove(temp_path)
                 except Exception:
                     pass
+            
+            # Output detections and class names for Rust to handle post-processing
+            # Rust will handle: GeoJSON, KML, Shapefile, annotated images
+            safe_print("  [4/4] Returning detections to Rust for post-processing...")
             safe_print(f"  ✓ Detection: {abnormal_count} abnormal, {normal_count} normal")
             successful += 1
             out_abs = os.path.abspath(output_dir)
+            
+            # Return detections and class names for Rust post-processing
             print(json.dumps({
                 "processed": index + 1, "total": total_files, "current_file": image_path,
                 "status": "OK", "abnormal_count": abnormal_count, "normal_count": normal_count,
-                "successful": successful, "failed": failed, "output_folder": out_abs
+                "successful": successful, "failed": failed, "output_folder": out_abs,
+                "detections": detections_list,  # Send detections to Rust
+                "class_names": class_names,  # Send class names for labeling
             }), flush=True)
         except Exception as e:
             safe_print(f"  ❌ Error processing {image_file}: {e}")

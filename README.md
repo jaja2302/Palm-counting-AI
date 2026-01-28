@@ -21,7 +21,7 @@ npm run build:prod
 
 Atau step manual:
 
-1. `npm run build:sidecar` — PyInstaller bundle `infer_worker.py` + `convert_tiff.py` ke `src-tauri/binaries/`
+1. `npm run build:sidecar` — Nuitka bundle `infer_worker.py` ke `src-tauri/binaries/`
 2. `npm run tauri build` — build app + bundle sidecar
 
 Output installer: `src-tauri/target/release/bundle/`.

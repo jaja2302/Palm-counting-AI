@@ -1,10 +1,13 @@
 //! Orchestrate processing, emit progress/log.
-//! Semua inference dilakukan di Python dengan YOLO (ultralytics).
-//! Rust hanya untuk orchestration dan UI.
+//! Inference dilakukan di Python dengan YOLO (ultralytics).
+//! Post-processing (GeoJSON, KML, Shapefile, annotated images) dilakukan di Rust.
 
 use crate::config::AppConfig;
+use crate::geo::{self, Detection};
+use crate::annotate;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::collections::HashMap;
 
 // Helper untuk get infer_worker sidecar path (mirip get_converter_path di config.rs)
 fn get_infer_worker_path() -> (std::path::PathBuf, bool) {
@@ -230,6 +233,32 @@ pub fn run_processing_files(
                     .and_then(|v| v.as_str())
                     .filter(|s| !s.is_empty())
                     .map(String::from);
+                
+                // Handle post-processing if detections are provided
+                if let (Some(detections_json), Some(class_names_json), Some(output_dir)) = (
+                    progress.get("detections"),
+                    progress.get("class_names"),
+                    &output_folder,
+                ) {
+                    if let (Ok(detections), Ok(class_names_map)) = (
+                        serde_json::from_value::<Vec<Detection>>(detections_json.clone()),
+                        serde_json::from_value::<HashMap<String, String>>(class_names_json.clone()),
+                    ) {
+                        let image_path = Path::new(&current_file);
+                        if let Err(e) = handle_post_processing(
+                            image_path,
+                            &detections,
+                            &class_names_map,
+                            output_dir,
+                            config,
+                        ) {
+                            if let Ok(mut log_fn) = on_log_shared.lock() {
+                                log_fn(&format!("Post-processing error: {}", e));
+                            }
+                        }
+                    }
+                }
+                
                 on_progress(&ProgressPayload {
                     processed,
                     total,
@@ -254,6 +283,85 @@ pub fn run_processing_files(
         total_abnormal,
         total_normal,
     });
+    Ok(())
+}
+
+/// Handle post-processing: GeoJSON, KML, Shapefile, annotated images
+fn handle_post_processing(
+    image_path: &Path,
+    detections: &[Detection],
+    class_names: &HashMap<String, String>,
+    output_dir: &str,
+    config: &AppConfig,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    use std::path::PathBuf;
+    
+    let output_path = PathBuf::from(output_dir);
+    std::fs::create_dir_all(&output_path)?;
+    
+    let stem = image_path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("output");
+    
+    // Convert class_names HashMap<String, String> to HashMap<i64, String>
+    let class_names_map: HashMap<i64, String> = class_names
+        .iter()
+        .filter_map(|(k, v)| k.parse::<i64>().ok().map(|id| (id, v.clone())))
+        .collect();
+    
+    // Read TFW file if exists
+    let base_name = image_path
+        .parent()
+        .and_then(|_p| image_path.file_stem())
+        .and_then(|s| s.to_str())
+        .map(|s| {
+            image_path
+                .parent()
+                .unwrap_or(Path::new("."))
+                .join(s)
+        });
+    
+    if let Some(base) = base_name {
+        let tfw_path = base.with_extension("tfw");
+        if tfw_path.exists() {
+            match geo::read_tfw(&tfw_path) {
+                Ok(tfw) => {
+                    // Generate GeoJSON
+                    let geojson = geo::generate_geojson(detections, &class_names_map, &tfw);
+                    let geojson_path = output_path.join(format!("{}.geojson", stem));
+                    if let Ok(_saved_path) = geo::save_geojson(&geojson, &geojson_path) {
+                        // Log will be handled by Python output
+                    }
+                    
+                    // Generate KML if requested
+                    if config.convert_kml.to_lowercase() == "true" {
+                        let kml_path = output_path.join(format!("{}.kml", stem));
+                        let _ = geo::generate_kml(&geojson, &kml_path);
+                    }
+                    
+                    // Generate Shapefile if requested
+                    if config.convert_shp.to_lowercase() == "true" {
+                        let shp_path = output_path.join(format!("{}.shp", stem));
+                        let _ = geo::generate_shapefile(&geojson, &shp_path);
+                    }
+                }
+                Err(_) => {
+                    // TFW file not found or invalid - skip geospatial output
+                }
+            }
+        }
+    }
+    
+    // Generate annotated image if requested
+    if config.save_annotated.to_lowercase() == "true" {
+        let line_width: u32 = config.line_width.parse().unwrap_or(3);
+        let annotated_path = output_path.join("annotated");
+        if let Ok(_) = annotate::save_annotated(image_path, detections, &annotated_path, line_width) {
+            eprintln!("  ✓ Annotated image saved");
+        }
+    }
+    
     Ok(())
 }
 

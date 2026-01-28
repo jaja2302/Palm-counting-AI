@@ -33,4 +33,8 @@ imageproc = "0.22"
 tiff = "0.9"
 ort = { version = "2.0.0-rc.11", features = ["cuda"] }
 ndarray = "0.17"
+# Geospatial operations (moved from Python)
+geojson = "0.24"
+shapefile = "0.5"
+regex = "1.10"
 

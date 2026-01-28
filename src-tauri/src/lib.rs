@@ -1,6 +1,8 @@
 mod config;
 mod infer;
 mod specs;
+mod geo;
+mod annotate;
 // mod yolo_onnx;  // Tidak digunakan lagi - semua inference di Python
 
 use tauri::Emitter;
