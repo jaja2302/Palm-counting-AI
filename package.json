@@ -9,6 +9,8 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "build:sidecar": "python src-tauri/scripts/build_python_sidecar.py",
+    "build:sidecar:pyinstaller": "python src-tauri/scripts/build_python_sidecar_pyinstaller.py",
+    "build:sidecar:cxfreeze": "python src-tauri/scripts/build_python_sidecar_cxfreeze.py",
     "build:placeholder": "python src-tauri/scripts/create_sidecar_placeholder.py",
     "build:full": "npm run build:sidecar && npm run tauri build",
     "build:prod": "npm run build:sidecar && npm run tauri build",

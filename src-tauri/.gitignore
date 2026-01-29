@@ -11,4 +11,7 @@
 /python_ai/dist/
 /python_ai/__pycache__/
 /python_ai/*.spec
+/python_ai/setup_cxfreeze*.py
 /binaries/
+/binaries_pyinstaller/
+/binaries_cxfreeze/

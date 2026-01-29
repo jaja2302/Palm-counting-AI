@@ -15,20 +15,33 @@ Tidak perlu install Python di PC target! Python akan dibundle sebagai executable
 
 ### 2. Build Python Sidecar
 
-Python worker akan dibundle sebagai standalone executable menggunakan PyInstaller:
+Python worker dibundle sebagai standalone executable. Tiga opsi:
 
+**Opsi A – Nuitka (default):**
 ```bash
-cd "Palm counting AI"
-python scripts/build_python_sidecar.py
+npm run build:sidecar
+# atau: python src-tauri/scripts/build_python_sidecar.py
 ```
+- Compile ke native; build lama (~20–30 min pertama), hasil bisa lebih kecil/cepat runtime.
 
-Script ini akan:
-- Install PyInstaller jika belum ada
-- Build `infer_worker.py` menjadi standalone executable
-- Menempatkan hasil di `src-tauri/binaries/infer_worker-<target-triple>.exe`
-- Auto-detect target triple (x86_64-pc-windows-msvc, dll)
+**Opsi B – PyInstaller:**
+```bash
+npm run build:sidecar:pyinstaller
+# atau: python src-tauri/scripts/build_python_sidecar_pyinstaller.py
+```
+- Bundle dengan PyInstaller; build biasanya lebih cepat (~5–15 min).
 
-**Output:** `src-tauri/binaries/infer_worker-x86_64-pc-windows-msvc.exe`
+**Opsi C – cx_Freeze:**
+```bash
+npm run build:sidecar:cxfreeze
+# atau: python src-tauri/scripts/build_python_sidecar_cxfreeze.py
+```
+- Folder output (exe + deps); startup sering lebih cepat dari PyInstaller.
+- **Catatan:** cx_Freeze + PyTorch/Ultralytics kadang `RecursionError`. Jika gagal, pakai Nuitka atau PyInstaller.
+
+- **Nuitka** → `src-tauri/binaries/infer_worker-<target-triple>.exe`
+- **PyInstaller** → `src-tauri/binaries_pyinstaller/` (single-file exe)
+- **cx_Freeze** → `src-tauri/binaries_cxfreeze/` (folder exe + dll; untuk dipakai app, salin isi ke `binaries/` atau rename folder)
 
 ### 3. Build Tauri App
 
@@ -72,7 +85,12 @@ Setelah build selesai, hasilnya ada di:
 ```
 src-tauri/
 ├── binaries/
-│   └── infer_worker-x86_64-pc-windows-msvc.exe  # Python worker (PyInstaller)
+│   └── infer_worker-x86_64-pc-windows-msvc.exe  # Nuitka (build:sidecar)
+├── binaries_pyinstaller/
+│   └── infer_worker-x86_64-pc-windows-msvc.exe  # PyInstaller (build:sidecar:pyinstaller)
+├── binaries_cxfreeze/
+│   ├── infer_worker-x86_64-pc-windows-msvc.exe  # cx_Freeze (build:sidecar:cxfreeze)
+│   └── ... (dll/deps)
 ├── resources/
 │   ├── python_ai/
 │   │   └── infer_worker.py  # Fallback untuk development
@@ -116,7 +134,7 @@ src-tauri/
 
 ## Catatan Penting
 
-1. **Tidak perlu venv** - PyInstaller akan bundle semua dependencies
+1. **Tidak perlu venv** - Nuitka/PyInstaller/cx_Freeze akan bundle semua dependencies
 2. **Tidak perlu Python di PC target** - sidecar adalah standalone executable
 3. **CUDA support** - Jika build dengan CUDA, sidecar akan include CUDA libraries
 4. **Cross-platform** - Build sidecar untuk setiap target platform yang berbeda
