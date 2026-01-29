@@ -162,6 +162,7 @@ pub fn run_processing_files(
         .into());
     }
 
+    eprintln!("[palm-counting-ai] Starting processing with infer_worker (sidecar)...");
     on_log("Starting processing with infer_worker (sidecar)...");
     let config_json = serde_json::json!({
         "imgsz": config.imgsz,
@@ -211,6 +212,7 @@ pub fn run_processing_files(
         let mut lines = stderr_reader_clone.lines();
         while let Some(Ok(line)) = lines.next() {
             if !line.trim().is_empty() {
+                eprintln!("[infer_worker] {}", line);
                 if let Ok(mut log_fn) = on_log_clone.lock() {
                     log_fn(&line);
                 }
@@ -222,6 +224,7 @@ pub fn run_processing_files(
     loop {
         if cancel.load(Ordering::Relaxed) {
             let _ = child.kill();
+            eprintln!("[palm-counting-ai] Cancelled.");
             if let Ok(mut log_fn) = on_log_shared.lock() {
                 log_fn("Cancelled.");
             }
@@ -270,8 +273,10 @@ pub fn run_processing_files(
     }
 
     let _ = child.wait();
+    let done_msg = format!("Done. {} succeeded, {} failed.", successful, failed);
+    eprintln!("[palm-counting-ai] {}", done_msg);
     if let Ok(mut log_fn) = on_log_shared.lock() {
-        log_fn(&format!("Done. {} succeeded, {} failed.", successful, failed));
+        log_fn(&done_msg);
     }
     on_done(&DonePayload {
         successful,

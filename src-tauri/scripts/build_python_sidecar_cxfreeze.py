@@ -96,7 +96,7 @@ build_exe_options = {{
     "includes": ["torch._C", "torch.backends.cuda", "torch.backends.cudnn",
                  "shapely.geometry", "shapely.geometry.point", "fastkml.kml", "fastkml.geometry"],
     "excludes": [
-        "tkinter", "unittest", "test", "pytest", "IPython", "jupyter", "jupyter_client",
+        "tkinter", "test", "pytest", "IPython", "jupyter", "jupyter_client",
         "matplotlib", "scipy", "pandas.tests", "sympy", "PIL.ImageQt", "setuptools",
     ],
     "zip_include_packages": ["encodings"],

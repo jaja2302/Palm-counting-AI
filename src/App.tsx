@@ -1,5 +1,6 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
+import { invoke } from "@tauri-apps/api/core";
 import {
   isPermissionGranted,
   requestPermission,
@@ -26,7 +27,7 @@ import {
   type ProcessingProgress,
 } from "@/stores/processing";
 import { applyTheme, useThemeStore, type Theme } from "@/stores/theme";
-import { Sun, Moon, Monitor } from "lucide-react";
+import { Sun, Moon, Monitor, Loader2 } from "lucide-react";
 
 interface DonePayload {
   successful: number;
@@ -121,54 +122,91 @@ function ProcessingStrip() {
   const clearLog = useProcessingStore((s) => s.clearLog);
   const cancel = useProcessingStore((s) => s.cancel);
 
-  if (!running) return null;
+  const hasLog = log.length > 0;
+  if (!running && !hasLog) return null;
+
   return (
     <div className="border-t bg-muted/30 space-y-4 p-4">
-      <div className="flex items-center justify-between gap-4">
-        <span className="text-sm font-medium">Processing…</span>
-        <Button variant="destructive" size="sm" onClick={cancel}>
-          Cancel
-        </Button>
-      </div>
-      {progress && (
+      {running && (
+        <>
+          <div className="flex items-center justify-between gap-4">
+            <span className="text-sm font-medium">Processing…</span>
+            <Button variant="destructive" size="sm" onClick={cancel}>
+              Cancel
+            </Button>
+          </div>
+          {progress && (
+            <Card className="border-border/50">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Progress</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <Progress value={progress.total ? (progress.processed / progress.total) * 100 : 0} />
+                <p className="text-sm">
+                  {progress.processed} / {progress.total} —{" "}
+                  {progress.current_file?.split(/[/\\]/).pop() ?? progress.current_file}{" "}
+                  — {progress.status}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Abnormal: {progress.abnormal_count} — Normal:{" "}
+                  {progress.normal_count}
+                </p>
+              </CardContent>
+            </Card>
+          )}
+        </>
+      )}
+      {hasLog && (
         <Card className="border-border/50">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Progress</CardTitle>
+          <CardHeader className="flex flex-row items-center justify-between py-2">
+            <CardTitle className="text-base">
+              {running ? "Log" : "Log (selesai)"}
+            </CardTitle>
+            <Button variant="ghost" size="sm" onClick={clearLog}>
+              Clear
+            </Button>
           </CardHeader>
-          <CardContent className="space-y-2">
-            <Progress value={progress.total ? (progress.processed / progress.total) * 100 : 0} />
-            <p className="text-sm">
-              {progress.processed} / {progress.total} —{" "}
-              {progress.current_file?.split(/[/\\]/).pop() ?? progress.current_file}{" "}
-              — {progress.status}
-            </p>
-            <p className="text-sm text-muted-foreground">
-              Abnormal: {progress.abnormal_count} — Normal:{" "}
-              {progress.normal_count}
-            </p>
+          <CardContent className="py-2">
+            <ScrollArea className="h-40 rounded-lg border border-border/50 bg-muted/20 p-2 font-mono text-xs">
+              {log.map((line, i) => (
+                <div key={i}>{line}</div>
+              ))}
+            </ScrollArea>
           </CardContent>
         </Card>
       )}
-      <Card className="border-border/50">
-        <CardHeader className="flex flex-row items-center justify-between py-2">
-          <CardTitle className="text-base">Log</CardTitle>
-          <Button variant="ghost" size="sm" onClick={clearLog}>
-            Clear
-          </Button>
-        </CardHeader>
-        <CardContent className="py-2">
-          <ScrollArea className="h-40 rounded-lg border border-border/50 bg-muted/20 p-2 font-mono text-xs">
-            {log.map((line, i) => (
-              <div key={i}>{line}</div>
-            ))}
-          </ScrollArea>
-        </CardContent>
-      </Card>
     </div>
   );
 }
 
+const LOADING_DELAY_MS = 20_000; // 20 detik sebelum tampil dashboard
+
 export default function App() {
+  const [appReady, setAppReady] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const minEnd = Date.now() + LOADING_DELAY_MS;
+
+    const run = async () => {
+      const checks = Promise.all([
+        invoke<boolean>("check_ai_pack_installed").catch(() => false),
+        invoke<unknown[]>("list_models_cmd").catch(() => []),
+      ]);
+      await checks;
+      if (cancelled) return;
+      const elapsed = minEnd - Date.now();
+      if (elapsed > 0) {
+        await new Promise((r) => setTimeout(r, elapsed));
+      }
+      if (!cancelled) setAppReady(true);
+    };
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   useEffect(() => {
     const unsubs: (() => void)[] = [];
     let cancelled = false;
@@ -269,6 +307,20 @@ export default function App() {
     m.addEventListener("change", handler);
     return () => m.removeEventListener("change", handler);
   }, []);
+
+  if (!appReady) {
+    return (
+      <div className="min-h-screen bg-background text-foreground flex flex-col items-center justify-center gap-6 p-6">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" aria-hidden />
+        <div className="text-center space-y-2">
+          <p className="text-lg font-medium">Memuat Palm Counting AI</p>
+          <p className="text-sm text-muted-foreground">
+            Mengecek model dan AI pack… Siap dalam ~20 detik.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <TooltipProvider delayDuration={300}>
