@@ -11,10 +11,16 @@ import { Download, Pause, Play, X } from "lucide-react";
 const DEFAULT_AI_PACK_API =
   (import.meta as any).env?.VITE_AI_PACK_API_URL ?? "http://192.168.1.34:8765";
 
-type DownloadStatus = "idle" | "downloading" | "paused" | "done" | "error";
+type DownloadStatus = "idle" | "downloading" | "paused" | "extracting" | "done" | "error";
 
 interface ProgressPayload {
   downloaded: number;
+  total: number;
+  percent: number;
+}
+
+interface ExtractProgressPayload {
+  current: number;
   total: number;
   percent: number;
 }
@@ -25,6 +31,11 @@ export function AIPackBanner() {
   const [status, setStatus] = useState<DownloadStatus>("idle");
   const [progress, setProgress] = useState<ProgressPayload>({
     downloaded: 0,
+    total: 0,
+    percent: 0,
+  });
+  const [extractProgress, setExtractProgress] = useState<ExtractProgressPayload>({
+    current: 0,
     total: 0,
     percent: 0,
   });
@@ -57,6 +68,19 @@ export function AIPackBanner() {
 
       u = await listen("ai-pack-paused", () => {
         if (!cancelled) setStatus("paused");
+      });
+      unsubs.push(u);
+
+      u = await listen<{ total: number }>("ai-pack-extracting", (e) => {
+        if (!cancelled) {
+          setStatus("extracting");
+          setExtractProgress({ current: 0, total: e.payload?.total ?? 0, percent: 0 });
+        }
+      });
+      unsubs.push(u);
+
+      u = await listen<ExtractProgressPayload>("ai-pack-extract-progress", (e) => {
+        if (!cancelled) setExtractProgress(e.payload);
       });
       unsubs.push(u);
 
@@ -154,13 +178,29 @@ export function AIPackBanner() {
               <Play className="mr-2 h-4 w-4" />
               Lanjutkan
             </Button>
-          ) : null}
+          ) : status === "extracting" ? null : null}
         </div>
         {(status === "downloading" || status === "paused") && (
           <div className="space-y-1">
             <Progress value={progress.percent} className="h-2" />
             <p className="text-xs text-muted-foreground">
               {progress.percent}% {sizeMb && ` — ${sizeMb}`}
+            </p>
+          </div>
+        )}
+        {status === "extracting" && (
+          <div className="space-y-1">
+            <p className="text-sm text-muted-foreground">
+              Mengekstrak file ke folder binaries…
+            </p>
+            <Progress
+              value={extractProgress.total > 0 ? extractProgress.percent : undefined}
+              className="h-2"
+            />
+            <p className="text-xs text-muted-foreground">
+              {extractProgress.total > 0
+                ? `${extractProgress.current} / ${extractProgress.total} file`
+                : "Memproses…"}
             </p>
           </div>
         )}

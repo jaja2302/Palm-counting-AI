@@ -126,7 +126,13 @@ async fn do_download(window: &tauri::Window, base_url: &str) -> Result<(), Strin
 
     let zip_file = std::fs::File::open(&zip_path).map_err(|e| e.to_string())?;
     let mut archive = zip::ZipArchive::new(zip_file).map_err(|e| e.to_string())?;
-    for i in 0..archive.len() {
+    let total_entries = archive.len();
+    let _ = window.emit(
+        "ai-pack-extracting",
+        serde_json::json!({ "total": total_entries }),
+    );
+    let mut extracted = 0_usize;
+    for i in 0..total_entries {
         let mut entry = archive.by_index(i).map_err(|e| e.to_string())?;
         let name = entry.name().replace('\\', "/");
         let name_trim = name
@@ -144,6 +150,17 @@ async fn do_download(window: &tauri::Window, base_url: &str) -> Result<(), Strin
             }
             let mut out = std::fs::File::create(&out_path).map_err(|e| e.to_string())?;
             std::io::copy(&mut entry, &mut out).map_err(|e| e.to_string())?;
+        }
+        extracted += 1;
+        if extracted % 50 == 0 || extracted == total_entries {
+            let _ = window.emit(
+                "ai-pack-extract-progress",
+                serde_json::json!({
+                    "current": extracted,
+                    "total": total_entries,
+                    "percent": if total_entries > 0 { (extracted as f64 / total_entries as f64 * 100.0).round() } else { 100 }
+                }),
+            );
         }
     }
     std::fs::remove_file(&zip_path).ok();
