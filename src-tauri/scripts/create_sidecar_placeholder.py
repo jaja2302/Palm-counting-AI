@@ -97,15 +97,12 @@ exit 0
     return True
 
 def create_placeholder():
-    """Create placeholders for all sidecars"""
-    print("Creating placeholders for all sidecars...")
-    success1 = create_placeholder_for_sidecar("infer_worker")
-    success2 = create_placeholder_for_sidecar("convert_tiff")
-    
-    if success1 and success2:
+    """Create placeholder for infer_worker sidecar"""
+    print("Creating placeholder for infer_worker sidecar...")
+    success = create_placeholder_for_sidecar("infer_worker")
+    if success:
         print("  Note: Untuk production, jalankan 'npm run build:sidecar' untuk build sidecar yang sebenarnya")
-        return True
-    return False
+    return success
 
 if __name__ == "__main__":
     success = create_placeholder()
