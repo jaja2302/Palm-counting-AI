@@ -21,7 +21,7 @@ BASE_URL = os.getenv("AI_PACK_BASE_URL", f"http://{API_HOST}:{API_PORT}")
 CHUNK_SIZE = 8 * 1024 * 1024  # 8 MB per chunk (lebih cepat dari 1 MB)
 SCRIPT_DIR = Path(__file__).resolve().parent
 DEFAULT_OUTPUT = SCRIPT_DIR / "dist" / "palm-counting-ai-pack-x64.zip"
-PROGRESS_EVERY_MB = 50  # cetak progress tiap 50 MB (kurangi print = lebih ringan)
+PROGRESS_EVERY_MB = 10  # cetak progress tiap 10 MB
 
 
 def get_info(base_url: str) -> dict | None:
@@ -54,7 +54,16 @@ def download_zip(base_url: str, output_path: Path, show_progress: bool = True) -
     content_length = r.headers.get("Content-Length")
     total_bytes = int(content_length) if content_length else None
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    last_printed_mb = 0
+    last_printed_mb = -1
+    total_mb_val = int(total_bytes / (1024 * 1024)) if total_bytes else 0
+
+    def show_progress_line():
+        mb = total // (1024 * 1024)
+        pct = min(100, total * 100 // total_bytes) if total_bytes else 0
+        print(f"\r  Download {mb} / {total_mb_val} MB ({pct}%)", end="", flush=True)
+
+    if show_progress and total_bytes:
+        show_progress_line()
 
     with open(output_path, "wb") as f:
         for chunk in r.iter_content(chunk_size=CHUNK_SIZE):
@@ -65,9 +74,7 @@ def download_zip(base_url: str, output_path: Path, show_progress: bool = True) -
                     mb = total // (1024 * 1024)
                     if mb - last_printed_mb >= PROGRESS_EVERY_MB or total >= total_bytes:
                         last_printed_mb = mb
-                        pct = min(100, total * 100 // total_bytes)
-                        total_mb = total_bytes / (1024 * 1024)
-                        print(f"\r  Download {mb} / {int(total_mb)} MB ({pct}%)", end="", flush=True)
+                        show_progress_line()
 
     if show_progress and total_bytes:
         print()
