@@ -6,36 +6,43 @@ use crate::config::AppConfig;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-// Helper untuk get infer_worker sidecar path (mirip get_converter_path di config.rs)
-fn get_infer_worker_path() -> (std::path::PathBuf, bool) {
+// Helper untuk get infer_worker sidecar exe path (TANPA fallback ke Python).
+fn get_infer_worker_path() -> std::path::PathBuf {
     // Try sidecar executable first
     if let Ok(exe) = std::env::current_exe() {
         if let Some(exe_dir) = exe.parent() {
             // Check in src-tauri/binaries/ (dev mode)
             if let Some(target_dir) = exe_dir.parent() {
                 if let Some(src_tauri_dir) = target_dir.parent() {
-                    let sidecar_bin = src_tauri_dir.join("binaries").join("infer_worker-x86_64-pc-windows-msvc.exe");
+                    let sidecar_bin = src_tauri_dir
+                        .join("binaries")
+                        .join("infer_worker-x86_64-pc-windows-msvc.exe");
                     if sidecar_bin.exists() {
                         if let Ok(metadata) = std::fs::metadata(&sidecar_bin) {
                             if metadata.len() > 1_000_000 {
-                                return (sidecar_bin, false);
+                                return sidecar_bin;
                             }
                         }
                     }
                 }
             }
-            
+
             // Check in same directory as executable (production – Tauri bundle)
             #[cfg(windows)]
             let prod_names = ["infer_worker.exe", "infer_worker-x86_64-pc-windows-msvc.exe"];
             #[cfg(not(windows))]
-            let prod_names: &[&str] = &["infer_worker", "infer_worker-x86_64-unknown-linux-gnu", "infer_worker-aarch64-apple-darwin", "infer_worker-x86_64-apple-darwin"];
+            let prod_names: &[&str] = &[
+                "infer_worker",
+                "infer_worker-x86_64-unknown-linux-gnu",
+                "infer_worker-aarch64-apple-darwin",
+                "infer_worker-x86_64-apple-darwin",
+            ];
             for &name in prod_names.iter() {
                 let sidecar = exe_dir.join(name);
                 if sidecar.exists() {
                     if let Ok(metadata) = std::fs::metadata(&sidecar) {
                         if metadata.len() > 1_000_000 {
-                            return (sidecar, false);
+                            return sidecar;
                         }
                     }
                 }
@@ -48,7 +55,7 @@ fn get_infer_worker_path() -> (std::path::PathBuf, bool) {
                     if sidecar_bin.exists() {
                         if let Ok(metadata) = std::fs::metadata(&sidecar_bin) {
                             if metadata.len() > 1_000_000 {
-                                return (sidecar_bin, false);
+                                return sidecar_bin;
                             }
                         }
                     }
@@ -56,48 +63,18 @@ fn get_infer_worker_path() -> (std::path::PathBuf, bool) {
             }
         }
     }
-    
-    // Fallback to Python script for dev mode
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(exe_dir) = exe.parent() {
-            let possible_paths = vec![
-                exe_dir.parent().and_then(|p| p.parent()).map(|p| p.join("python_ai").join("infer_worker.py")),
-            ];
-            
-            for path_opt in possible_paths {
-                if let Some(path) = path_opt {
-                    if path.exists() {
-                        return (path, true);
-                    }
-                }
-            }
-        }
-    }
-    
-    // Fallback from CWD
-    if let Ok(cwd) = std::env::current_dir() {
-        let fallback1 = cwd.join("src-tauri").join("python_ai").join("infer_worker.py");
-        if fallback1.exists() {
-            return (fallback1, true);
-        }
-        let fallback2 = cwd.join("python_ai").join("infer_worker.py");
-        if fallback2.exists() {
-            return (fallback2, true);
-        }
-    }
-    
-    // Default path
-    (std::path::PathBuf::from("src-tauri/python_ai/infer_worker.py"), true)
+
+    // Default path (dipakai hanya untuk pesan error jika tidak ditemukan)
+    std::path::PathBuf::from("src-tauri/binaries/infer_worker-x86_64-pc-windows-msvc.exe")
 }
 
 /// Returns true if a real AI pack sidecar (size > 1MB) is installed.
 pub fn has_ai_pack_installed() -> bool {
-    let (path, use_python) = get_infer_worker_path();
-    if use_python {
-        return false;
-    }
+    let path = get_infer_worker_path();
     path.exists()
-        && std::fs::metadata(&path).map(|m| m.len() > 1_000_000).unwrap_or(false)
+        && std::fs::metadata(&path)
+            .map(|m| m.len() > 1_000_000)
+            .unwrap_or(false)
 }
 
 /// Returns the path to the binaries folder where AI pack should be extracted (for production).
@@ -149,7 +126,7 @@ pub fn run_processing_files(
     if !model_path_buf.is_file() {
         return Err(format!("Model file not found: {}", model_path).into());
     }
-    let (worker_path, use_python) = get_infer_worker_path();
+    let worker_path = get_infer_worker_path();
     if !worker_path.exists() {
         return Err(format!(
             "infer_worker sidecar not found. Run 'npm run build:sidecar' to build it."
@@ -174,14 +151,8 @@ pub fn run_processing_files(
     let files_json = serde_json::to_string(files)
         .map_err(|e| format!("Failed to serialize files: {}", e))?;
 
-    let mut cmd = if use_python {
-        let mut c = Command::new("python");
-        c.arg("-u").arg(&worker_path);
-        c.env("PYTHONUNBUFFERED", "1");
-        c
-    } else {
-        Command::new(&worker_path)
-    };
+    // Wajib pakai sidecar executable (tanpa fallback Python).
+    let mut cmd = Command::new(&worker_path);
     cmd.arg("--infer-files")
         .arg(&files_json)
         .arg(model_path)

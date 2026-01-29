@@ -55,7 +55,7 @@ def build_sidecar_pyinstaller(script_name: str, output_name_base: str) -> bool:
     script_dir = Path(__file__).parent
     src_tauri_dir = script_dir.parent
     python_ai_dir = src_tauri_dir / "python_ai"
-    out_dir = src_tauri_dir / "binaries_pyinstaller"
+    out_dir = src_tauri_dir / "binaries"
 
     out_dir.mkdir(exist_ok=True)
 
@@ -75,7 +75,7 @@ def build_sidecar_pyinstaller(script_name: str, output_name_base: str) -> bool:
     exe_suffix = ".exe" if sys.platform == "win32" else ""
     final_exe = output_name + exe_suffix
 
-    # Base PyInstaller args — output ke binaries_pyinstaller (terpisah dari binaries/ Nuitka)
+    # Base PyInstaller args — output ke binaries (terpisah dari binaries/ Nuitka)
     args = [
         sys.executable,
         "-m",
@@ -143,7 +143,7 @@ def build_sidecar_pyinstaller(script_name: str, output_name_base: str) -> bool:
 
     print("\nRunning PyInstaller...")
     print("  ⚠️  First build: ~5–15 min (PyTorch + CUDA). Biasanya lebih cepat dari Nuitka.")
-    print(f"  ℹ️  Output single-file exe di binaries_pyinstaller/")
+    print(f"  ℹ️  Output single-file exe di binaries/")
 
     debug_cmd_file = out_dir / f"pyinstaller_cmd_{output_name_base}.txt"
     debug_cmd_file.write_text(" \\\n  ".join(args), encoding="utf-8")
@@ -205,8 +205,8 @@ def main():
         print("\n" + "=" * 70)
         print("✓ Sidecar built with PyInstaller!")
         print("=" * 70)
-        print("\n📋 Output di src-tauri/binaries_pyinstaller/ (terpisah dari binaries/).")
-        print("   Untuk dipakai app: salin exe ke binaries/ atau jalankan dari binaries_pyinstaller/.")
+        print("\n📋 Output di src-tauri/binaries/ (terpisah dari binaries/).")
+        print("   Untuk dipakai app: salin exe ke binaries/ atau jalankan dari binaries/.")
         print("   Nuitka: npm run build:sidecar → binaries/")
         return True
     print("\n" + "=" * 70)

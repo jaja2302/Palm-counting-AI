@@ -5,7 +5,7 @@ FULL SUPPORT: YOLO + Ultralytics + GPU (CUDA)
 Opsi saat ini:
   1. Nuitka    → binaries/           (npm run build:sidecar)
   2. PyInstaller → binaries_pyinstaller/
-  3. cx_Freeze → binaries_cxfreeze/  (npm run build:sidecar:cxfreeze)
+  3. cx_Freeze → binaries/  (npm run build:sidecar:cxfreeze)
 
 cx_Freeze: folder output (exe + deps), startup sering lebih cepat dari PyInstaller.
 """
@@ -56,7 +56,7 @@ def build_sidecar_cxfreeze(script_name: str, output_name_base: str) -> bool:
     script_dir = Path(__file__).parent
     src_tauri_dir = script_dir.parent
     python_ai_dir = src_tauri_dir / "python_ai"
-    out_dir = src_tauri_dir / "binaries_cxfreeze"
+    out_dir = src_tauri_dir / "binaries"
 
     out_dir.mkdir(exist_ok=True)
 
@@ -165,7 +165,7 @@ def main():
     print("\n" + "=" * 70)
     print("Building infer_worker (YOLO + GPU)...")
     print("=" * 70)
-    print("  ℹ️  Output folder: src-tauri/binaries_cxfreeze/ (exe + deps)")
+    print("  ℹ️  Output folder: src-tauri/binaries/ (exe + deps)")
     print("  ⚠️  Pakai sys.setrecursionlimit + excludes untuk hindari RecursionError (torch/ultralytics).")
     print("  ⚠️  Jika tetap gagal: gunakan Nuitka (build:sidecar) atau PyInstaller (build:sidecar:pyinstaller).\n")
 
@@ -175,9 +175,9 @@ def main():
         print("\n" + "=" * 70)
         print("✓ Sidecar built with cx_Freeze!")
         print("=" * 70)
-        print("\n📋 Output di src-tauri/binaries_cxfreeze/ (folder exe + dll).")
+        print("\n📋 Output di src-tauri/binaries/ (folder exe + dll).")
         print("   Untuk testing: rename folder ke binaries/ atau salin isi ke binaries/.")
-        print("   Nuitka → binaries/ | PyInstaller → binaries_pyinstaller/ | cx_Freeze → binaries_cxfreeze/")
+        print("   Nuitka → binaries/ | PyInstaller → binaries_pyinstaller/ | cx_Freeze → binaries/")
         return True
     print("\n" + "=" * 70)
     print("✗ infer_worker cx_Freeze build failed!")

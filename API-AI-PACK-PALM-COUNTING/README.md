@@ -25,7 +25,11 @@ uvicorn main:app --host 0.0.0.0 --port 8765
 # Dari repo root
 cd "Palm counting AI"
 npm run build:sidecar
+# install deps sekali
+python -m pip install -r requirements.txt
 
+# jalanin API
+python -m uvicorn main:app --host 0.0.0.0 --port 8765
 # Lalu zip
 cd API-AI-PACK-PALM-COUNTING
 python build_and_zip.py
