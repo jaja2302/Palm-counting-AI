@@ -55,7 +55,7 @@ def build_sidecar_pyinstaller(script_name: str, output_name_base: str) -> bool:
     script_dir = Path(__file__).parent
     src_tauri_dir = script_dir.parent
     python_ai_dir = src_tauri_dir / "python_ai"
-    out_dir = src_tauri_dir / "binaries"
+    out_dir = src_tauri_dir / "binaries_pyinstaller"
 
     out_dir.mkdir(exist_ok=True)
 
@@ -91,7 +91,7 @@ def build_sidecar_pyinstaller(script_name: str, output_name_base: str) -> bool:
     if sys.platform == "win32":
         args.append("--noconsole")
 
-    # Hidden imports (PyTorch, Ultralytics, CV2, PIL, geo, etc.)
+    # Hidden imports — selaras dengan build lama yang berhasil (torch.distributed, ultralytics lengkap)
     hidden = [
         "torch",
         "torch.nn",
@@ -101,32 +101,60 @@ def build_sidecar_pyinstaller(script_name: str, output_name_base: str) -> bool:
         "torch.backends.cuda",
         "torch.backends.cudnn",
         "torch.utils",
+        "torch.distributed",
+        "torch.distributed.nn",
+        "torch.version",
         "torchvision",
         "torchvision.transforms",
         "torchvision.models",
+        "torchvision.models.resnet",
+        "torchvision.models.vgg",
         "ultralytics",
         "ultralytics.models",
         "ultralytics.models.yolo",
         "ultralytics.models.yolo.detect",
+        "ultralytics.models.yolo.detect.predict",
+        "ultralytics.models.yolo.detect.val",
+        "ultralytics.models.yolo.detect.train",
+        "ultralytics.models.yolo.segment",
+        "ultralytics.models.yolo.classify",
+        "ultralytics.models.rtdetr",
+        "ultralytics.models.sam",
         "ultralytics.engine",
         "ultralytics.engine.predictor",
+        "ultralytics.engine.results",
+        "ultralytics.engine.trainer",
+        "ultralytics.engine.validator",
         "ultralytics.utils",
+        "ultralytics.utils.plotting",
+        "ultralytics.utils.ops",
+        "ultralytics.utils.torch_utils",
+        "ultralytics.utils.checks",
         "ultralytics.data",
+        "ultralytics.data.utils",
+        "ultralytics.data.base",
         "ultralytics.nn",
+        "ultralytics.nn.modules",
+        "ultralytics.nn.tasks",
+        "ultralytics.trackers",
+        "ultralytics.trackers.track",
         "cv2",
         "PIL",
         "PIL.Image",
+        "PIL.ImageDraw",
         "numpy",
         "geojson",
         "shapely",
         "shapely.geometry",
         "shapely.geometry.point",
+        "shapely.ops",
         "geopandas",
         "fastkml",
         "fastkml.kml",
         "fastkml.geometry",
         "yaml",
         "tqdm",
+        "unittest",
     ]
     for h in hidden:
         args.append(f"--hidden-import={h}")

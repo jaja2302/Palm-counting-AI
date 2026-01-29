@@ -6,9 +6,18 @@ use crate::config::AppConfig;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+// Minimum exe size (bytes) untuk dianggap sidecar asli, bukan placeholder.
+// Placeholder ~98 bytes; cx_Freeze launcher bisa kecil (~1 KB), Nuitka/PyInstaller lebih besar.
+const MIN_SIDECAR_EXE_SIZE: u64 = 500;
+
+/// Returns true if path is a real sidecar (not dev placeholder). Only exe size is checked.
+fn is_real_sidecar(path: &std::path::Path) -> bool {
+    let Ok(meta) = std::fs::metadata(path) else { return false };
+    meta.len() >= MIN_SIDECAR_EXE_SIZE
+}
+
 // Helper untuk get infer_worker sidecar exe path (TANPA fallback ke Python).
-// Mengembalikan path exe jika ada (ukuran tidak dicek di sini; cx_Freeze exe kecil + banyak DLL).
-// Urutan: AppData Local (palm-counting-ai/binaries) → Dev (src-tauri/binaries) → sebelah exe → exe/binaries.
+// Urutan: Dev (src-tauri/binaries) & production dulu, AppData terakhir — untuk testing pakai folder binaries di project.
 fn get_infer_worker_path() -> std::path::PathBuf {
     #[cfg(windows)]
     let prod_names = ["infer_worker.exe", "infer_worker-x86_64-pc-windows-msvc.exe"];
@@ -20,47 +29,55 @@ fn get_infer_worker_path() -> std::path::PathBuf {
         "infer_worker-x86_64-apple-darwin",
     ];
 
-    // AppData Local: palm-counting-ai/binaries/ (sama seperti models/ dan database.db)
-    let app_bin = crate::config::app_data_binaries_dir();
-    if app_bin.is_dir() {
-        for &name in prod_names.iter() {
-            let sidecar_bin = app_bin.join(name);
-            if sidecar_bin.is_file() {
-                return sidecar_bin;
-            }
-        }
-    }
-
+    // 1) Dev: src-tauri/binaries, binaries_cx_Freeze, binaries_pyinstaller — testing mana yang works
     if let Ok(exe) = std::env::current_exe() {
         if let Some(exe_dir) = exe.parent() {
-            // Dev: src-tauri/binaries/
             if let Some(target_dir) = exe_dir.parent() {
                 if let Some(src_tauri_dir) = target_dir.parent() {
-                    let sidecar_bin = src_tauri_dir
-                        .join("binaries")
-                        .join("infer_worker-x86_64-pc-windows-msvc.exe");
-                    if sidecar_bin.is_file() {
-                        return sidecar_bin;
+                    // let dev_bin_dirs = ["binaries", "binaries_cx_Freeze", "binaries_pyinstaller"];
+                    let dev_bin_dirs = ["binaries_cx_Freeze"];
+                    for &bin_dir in dev_bin_dirs.iter() {
+                        let bin_path = src_tauri_dir.join(bin_dir);
+                        if !bin_path.is_dir() {
+                            continue;
+                        }
+                        for &name in prod_names.iter() {
+                            let sidecar_bin = bin_path.join(name);
+                            if sidecar_bin.is_file() && is_real_sidecar(&sidecar_bin) {
+                                return sidecar_bin;
+                            }
+                        }
                     }
                 }
             }
 
-            // Production: sebelahan dengan exe
+            // 2) Production: sebelahan dengan exe
             for &name in prod_names.iter() {
                 let sidecar = exe_dir.join(name);
-                if sidecar.is_file() {
+                if sidecar.is_file() && is_real_sidecar(&sidecar) {
                     return sidecar;
                 }
             }
-            // Production: subfolder binaries/ di samping exe
+            // 3) Production: subfolder binaries/ di samping exe
             let binaries_dir = exe_dir.join("binaries");
             if binaries_dir.is_dir() {
                 for &name in prod_names.iter() {
                     let sidecar_bin = binaries_dir.join(name);
-                    if sidecar_bin.is_file() {
+                    if sidecar_bin.is_file() && is_real_sidecar(&sidecar_bin) {
                         return sidecar_bin;
                     }
                 }
+            }
+        }
+    }
+
+    // 4) AppData Local: palm-counting-ai/binaries/ — fallback (copy-paste ke sini nanti kalau perlu)
+    let app_bin = crate::config::app_data_binaries_dir();
+    if app_bin.is_dir() {
+        for &name in prod_names.iter() {
+            let sidecar_bin = app_bin.join(name);
+            if sidecar_bin.is_file() && is_real_sidecar(&sidecar_bin) {
+                return sidecar_bin;
             }
         }
     }
@@ -84,10 +101,17 @@ pub(crate) fn dir_total_size(path: &std::path::Path) -> u64 {
     total
 }
 
-/// Returns true if a real AI pack is installed:
-/// - Nuitka/PyInstaller: exe size > 1MB
-/// - cx_Freeze: exe + DLLs; exe bisa kecil, jadi cek total ukuran folder binaries > 5MB
+/// Returns true if AI pack sudah terpasang: folder AppData binaries ada dan ada isinya.
+/// Simple: jika folder ada dan total ukuran > 0 = sudah download/terpasang.
 pub fn has_ai_pack_installed() -> bool {
+    let app_bin = crate::config::app_data_binaries_dir();
+    if app_bin.is_dir() {
+        let total = dir_total_size(&app_bin);
+        if total > 0 {
+            return true;
+        }
+    }
+    // Fallback: cek sidecar di lokasi dev/production (exe asli >= 100KB atau folder > 5MB)
     let path = get_infer_worker_path();
     if !path.is_file() {
         return false;
@@ -96,7 +120,6 @@ pub fn has_ai_pack_installed() -> bool {
     if exe_size > 1_000_000 {
         return true;
     }
-    // cx_Freeze: exe kecil, deps di folder yang sama (~8MB+ khas)
     if let Some(bin_dir) = path.parent() {
         let total = dir_total_size(bin_dir);
         if total > 5_000_000 {
@@ -156,14 +179,24 @@ pub fn run_processing_files(
     }
     let worker_path = get_infer_worker_path();
     if !worker_path.exists() {
+        let app_bin = crate::config::app_data_binaries_dir();
+        #[cfg(windows)]
+        let exe_name = "infer_worker-x86_64-pc-windows-msvc.exe";
+        #[cfg(not(windows))]
+        let exe_name = "infer_worker (sesuai target triple)";
         return Err(format!(
-            "infer_worker sidecar not found. Run 'npm run build:sidecar' to build it."
+            "infer_worker tidak ditemukan. Build: npm run build:sidecar:cxfreeze, lalu salin isi folder src-tauri/binaries ke {} (pastikan ada file {} di dalamnya, bukan placeholder 98 byte)",
+            app_bin.display(),
+            exe_name
         )
         .into());
     }
 
     eprintln!("[palm-counting-ai] Starting processing with infer_worker (sidecar)...");
     on_log("Starting processing with infer_worker (sidecar)...");
+    let worker_path_display = worker_path.display().to_string();
+    eprintln!("[palm-counting-ai] Using sidecar exe: {}", worker_path_display);
+    on_log(&format!("Using sidecar exe: {}", worker_path_display));
     let config_json = serde_json::json!({
         "imgsz": config.imgsz,
         "conf": config.conf,
@@ -190,9 +223,17 @@ pub fn run_processing_files(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
-    let mut child = cmd
-        .spawn()
-        .map_err(|e| format!("Failed to start infer_worker: {}", e))?;
+    let mut child = cmd.spawn().map_err(|e| {
+        let msg = format!("Failed to start infer_worker: {}", e);
+        if e.raw_os_error() == Some(216) {
+            format!(
+                "{} (Error 216: exe tidak kompatibel—mungkin file placeholder. Build dengan: npm run build:sidecar:cxfreeze lalu salin isi folder src-tauri/binaries ke AppData Local palm-counting-ai/binaries)",
+                msg
+            )
+        } else {
+            msg
+        }
+    })?;
     let stdout = child.stdout.take().ok_or("Failed to capture stdout")?;
     let stderr = child.stderr.take().ok_or("Failed to capture stderr")?;
     let stdout_reader = BufReader::new(stdout);

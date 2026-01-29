@@ -25,8 +25,12 @@ interface ExtractProgressPayload {
   percent: number;
 }
 
-export function AIPackBanner() {
-  const [installed, setInstalled] = useState<boolean | null>(null);
+interface AIPackBannerProps {
+  initialAiPackInstalled?: boolean | null;
+}
+
+export function AIPackBanner({ initialAiPackInstalled = null }: AIPackBannerProps) {
+  const [installed, setInstalled] = useState<boolean | null>(initialAiPackInstalled ?? null);
   const [apiUrl, setApiUrl] = useState<string>(DEFAULT_AI_PACK_API);
   const [status, setStatus] = useState<DownloadStatus>("idle");
   const [progress, setProgress] = useState<ProgressPayload>({
@@ -44,6 +48,10 @@ export function AIPackBanner() {
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
+    if (initialAiPackInstalled !== null) {
+      setInstalled(initialAiPackInstalled);
+      return;
+    }
     let cancelled = false;
     invoke<boolean>("check_ai_pack_installed")
       .then((ok) => {
@@ -55,7 +63,7 @@ export function AIPackBanner() {
     return () => {
       cancelled = true;
     };
-  }, [status === "done"]);
+  }, [initialAiPackInstalled, status === "done"]);
 
   useEffect(() => {
     const unsubs: (() => void)[] = [];

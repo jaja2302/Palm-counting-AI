@@ -14,4 +14,4 @@
 /python_ai/setup_cxfreeze*.py
 /binaries/
 /binaries_pyinstaller/
-/binaries_cxfreeze/
+/binaries_cx_Freeze/

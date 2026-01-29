@@ -183,18 +183,19 @@ const LOADING_DELAY_MS = 20_000; // 20 detik sebelum tampil dashboard
 
 export default function App() {
   const [appReady, setAppReady] = useState(false);
+  const [initialAiPackInstalled, setInitialAiPackInstalled] = useState<boolean | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     const minEnd = Date.now() + LOADING_DELAY_MS;
 
     const run = async () => {
-      const checks = Promise.all([
+      const [aiPackOk] = await Promise.all([
         invoke<boolean>("check_ai_pack_installed").catch(() => false),
         invoke<unknown[]>("list_models_cmd").catch(() => []),
       ]);
-      await checks;
       if (cancelled) return;
+      setInitialAiPackInstalled(aiPackOk);
       const elapsed = minEnd - Date.now();
       if (elapsed > 0) {
         await new Promise((r) => setTimeout(r, elapsed));
@@ -333,7 +334,7 @@ export default function App() {
             <ThemeToggle />
           </div>
         </header>
-        <AIPackBanner />
+        <AIPackBanner initialAiPackInstalled={initialAiPackInstalled} />
         <Tabs defaultValue="dashboard" className="flex flex-1 flex-col">
           <TabsList className="h-11 w-full justify-start gap-0 rounded-none border-b bg-transparent px-4 py-0">
             <TabsTrigger

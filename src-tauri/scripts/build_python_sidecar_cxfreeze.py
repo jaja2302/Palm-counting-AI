@@ -56,7 +56,7 @@ def build_sidecar_cxfreeze(script_name: str, output_name_base: str) -> bool:
     script_dir = Path(__file__).parent
     src_tauri_dir = script_dir.parent
     python_ai_dir = src_tauri_dir / "python_ai"
-    out_dir = src_tauri_dir / "binaries"
+    out_dir = src_tauri_dir / "binaries_cx_Freeze"
 
     out_dir.mkdir(exist_ok=True)
 
@@ -92,12 +92,15 @@ BASE = "gui" if sys.platform == "win32" else None
 build_exe_options = {{
     "build_exe": OUT_DIR,
     "packages": ["torch", "torchvision", "ultralytics", "numpy", "PIL", "cv2",
-                 "geojson", "shapely", "geopandas", "fastkml", "yaml", "tqdm"],
-    "includes": ["torch._C", "torch.backends.cuda", "torch.backends.cudnn",
-                 "shapely.geometry", "shapely.geometry.point", "fastkml.kml", "fastkml.geometry"],
+                 "geojson", "shapely", "geopandas", "fastkml", "yaml", "tqdm", "sympy"],
+    "includes": [
+        "torch._C", "torch.backends.cuda", "torch.backends.cudnn",
+        "torch.distributed", "torch.distributed.nn",
+        "unittest",
+    ],
     "excludes": [
         "tkinter", "test", "pytest", "IPython", "jupyter", "jupyter_client",
-        "matplotlib", "scipy", "pandas.tests", "sympy", "PIL.ImageQt", "setuptools",
+        "matplotlib", "scipy", "pandas.tests", "PIL.ImageQt", "setuptools",
     ],
     "zip_include_packages": ["encodings"],
     "zip_exclude_packages": ["*"],
@@ -165,7 +168,7 @@ def main():
     print("\n" + "=" * 70)
     print("Building infer_worker (YOLO + GPU)...")
     print("=" * 70)
-    print("  ℹ️  Output folder: src-tauri/binaries/ (exe + deps)")
+    print("  ℹ️  Output folder: src-tauri/binaries_cx_Freeze/ (exe + deps)")
     print("  ⚠️  Pakai sys.setrecursionlimit + excludes untuk hindari RecursionError (torch/ultralytics).")
     print("  ⚠️  Jika tetap gagal: gunakan Nuitka (build:sidecar) atau PyInstaller (build:sidecar:pyinstaller).\n")
 
@@ -175,9 +178,9 @@ def main():
         print("\n" + "=" * 70)
         print("✓ Sidecar built with cx_Freeze!")
         print("=" * 70)
-        print("\n📋 Output di src-tauri/binaries/ (folder exe + dll).")
-        print("   Untuk testing: rename folder ke binaries/ atau salin isi ke binaries/.")
-        print("   Nuitka → binaries/ | PyInstaller → binaries_pyinstaller/ | cx_Freeze → binaries/")
+        print("\n📋 Output di src-tauri/binaries_cx_Freeze/ (folder exe + dll).")
+        print("   Untuk testing: infer.rs sudah cek binaries_cx_Freeze; atau salin ke binaries/.")
+        print("   Nuitka → binaries/ | PyInstaller → binaries_pyinstaller/ | cx_Freeze → binaries_cx_Freeze/")
         return True
     print("\n" + "=" * 70)
     print("✗ infer_worker cx_Freeze build failed!")
