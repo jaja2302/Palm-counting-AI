@@ -6,8 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Download, Pause, Play, X } from "lucide-react";
 
-const DEFAULT_AI_PACK_API =
-  (import.meta as any).env?.VITE_AI_PACK_API_URL ?? "http://192.168.1.34:8765";
+/** URL API AI pack — hardcoded, tidak pakai env/config. */
+const AI_PACK_DOWNLOAD_URL = "http://192.168.1.34:8765";
 
 type DownloadStatus = "idle" | "downloading" | "paused" | "extracting" | "done" | "error";
 
@@ -127,7 +127,7 @@ export function AIPackBanner({ initialAiPackInstalled = null }: AIPackBannerProp
     setLogLines([]);
     setStatus("downloading");
     invoke("start_download_ai_pack", {
-      baseUrl: DEFAULT_AI_PACK_API.trim(),
+      baseUrl: AI_PACK_DOWNLOAD_URL.trim(),
     }).catch((e) => {
       setStatus("error");
       setErrorMsg(String(e));
