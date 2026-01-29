@@ -26,7 +26,7 @@ def build_sidecar() -> bool:
     env["PALM_PROJECT_ROOT"] = str(REPO_ROOT)
     try:
         subprocess.run(
-            ["npm", "run", "build:sidecar"],
+            ["npm", "run", "build:sidecar:pyinstaller"],
             cwd=REPO_ROOT,
             env=env,
             check=True,

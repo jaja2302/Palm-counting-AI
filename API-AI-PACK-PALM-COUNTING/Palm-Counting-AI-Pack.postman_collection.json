@@ -1,0 +1,73 @@
+{
+  "info": {
+    "name": "Palm Counting AI - AI Pack API",
+    "_postman_id": "c3b5e3f2-0000-0000-0000-ai-pack-collection",
+    "description": "Collection untuk generate & download AI pack Palm Counting AI.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Info AI Pack",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/info",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "info"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Download AI Pack",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/download",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "download"
+          ]
+        }
+      }
+    },
+    {
+      "name": "Build AI Pack (sidecar + zip)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{}"
+        },
+        "url": {
+          "raw": "{{base_url}}/build",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "build"
+          ]
+        }
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://192.168.1.34:8765"
+    }
+  ]
+}

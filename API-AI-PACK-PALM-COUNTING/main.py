@@ -16,6 +16,12 @@ app = FastAPI(title="Palm Counting AI - AI Pack API", version="1.0.0")
 
 PACK_PATH = DIST_DIR / ZIP_NAME
 
+# Konfigurasi lewat environment variable
+# - AI_PACK_HOST (default: "0.0.0.0")
+# - AI_PACK_PORT (default: 8765, fallback ke PORT jika AI_PACK_PORT tidak ada)
+API_HOST = os.getenv("AI_PACK_HOST", "0.0.0.0")
+API_PORT = int(os.getenv("AI_PACK_PORT", os.getenv("PORT", "8765")))
+
 
 def ensure_pack() -> Path | None:
     """Pastikan file zip ada; kalau belum, coba build (skip build, hanya zip jika binaries ada)."""
@@ -115,4 +121,4 @@ def build():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8765)
+    uvicorn.run(app, host=API_HOST, port=API_PORT)
