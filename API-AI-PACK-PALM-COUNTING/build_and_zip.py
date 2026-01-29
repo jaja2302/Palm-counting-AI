@@ -1,16 +1,13 @@
 """
-Zip folder src-tauri/binaries/ ke dist/palm-counting-ai-pack-x64.zip.
-Tidak ada build sidecar di sini; build manual di server (cx_Freeze/Nuitka/PyInstaller).
-Jalankan dari folder API-AI-PACK-PALM-COUNTING. Bisa set PALM_PROJECT_ROOT jika repo di tempat lain.
+Zip folder src-tauri/binaries/ ke dist/. API dan Tauri satu repo → binaries di ../src-tauri/binaries.
+Build sidecar manual; ini cuma zip.
 """
-import os
 import sys
 import zipfile
 from pathlib import Path
 
 API_DIR = Path(__file__).resolve().parent
-REPO_ROOT = Path(os.environ.get("PALM_PROJECT_ROOT", API_DIR.parent))
-BINARIES_DIR = REPO_ROOT / "src-tauri" / "binaries"
+BINARIES_DIR = API_DIR.parent / "src-tauri" / "binaries"
 DIST_DIR = API_DIR / "dist"
 ZIP_NAME = "palm-counting-ai-pack-x64.zip"
 TARGET_TRIPLE = "x86_64-pc-windows-msvc"
