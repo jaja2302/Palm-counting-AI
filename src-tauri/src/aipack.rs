@@ -89,11 +89,6 @@ async fn do_download(window: &tauri::Window, base_url: &str) -> Result<(), Strin
 
     let mut stream = response.bytes_stream();
     let mut downloaded = start;
-    let total_for_progress = if start > 0 {
-        start + content_length
-    } else {
-        content_length
-    };
 
     use futures_util::StreamExt;
     while let Some(chunk) = stream.next().await {
@@ -152,6 +147,15 @@ async fn do_download(window: &tauri::Window, base_url: &str) -> Result<(), Strin
         }
     }
     std::fs::remove_file(&zip_path).ok();
+
+    // Hanya emit "siap dipakai" jika exe yang ter-extract benar-benar AI pack (size > 1MB).
+    if !crate::infer::has_ai_pack_installed() {
+        return Err(
+            "File yang didownload bukan AI pack valid (ukuran terlalu kecil). Pastikan server menyajikan zip hasil build sidecar yang sebenarnya."
+                .to_string(),
+        );
+    }
+
     let _ = window.emit("ai-pack-done", ());
     Ok(())
 }

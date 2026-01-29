@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { openPath, revealItemInDir } from "@tauri-apps/plugin-opener";
+import { listen } from "@tauri-apps/api/event";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -124,6 +125,7 @@ export function Dashboard() {
     tfwPath: string;
   } | null>(null);
   const [addGroupName, setAddGroupName] = useState("");
+  const [aiPackInstalled, setAiPackInstalled] = useState<boolean | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -149,6 +151,36 @@ export function Dashboard() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Cek AI pack terpasang + update saat download selesai.
+  useEffect(() => {
+    let cancelled = false;
+
+    const check = async () => {
+      try {
+        const ok = await invoke<boolean>("check_ai_pack_installed");
+        if (!cancelled) setAiPackInstalled(ok);
+      } catch {
+        if (!cancelled) setAiPackInstalled(false);
+      }
+    };
+
+    void check();
+
+    const unsubs: (() => void)[] = [];
+    const setup = async () => {
+      const u = await listen("ai-pack-done", () => {
+        void check();
+      });
+      unsubs.push(u);
+    };
+    void setup();
+
+    return () => {
+      cancelled = true;
+      unsubs.forEach((f) => f());
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -257,6 +289,23 @@ export function Dashboard() {
       appendLog("Select an active YOLO model first.");
       return;
     }
+    // Wajib AI pack terpasang (sidecar exe) sebelum mulai processing.
+    try {
+      const hasPack = await invoke<boolean>("check_ai_pack_installed");
+      setAiPackInstalled(hasPack);
+      if (!hasPack) {
+        appendLog(
+          "AI pack belum terpasang. Download AI pack terlebih dahulu dari banner di atas sebelum menjalankan processing."
+        );
+        return;
+      }
+    } catch {
+      appendLog(
+        "Tidak dapat mengecek status AI pack. Pastikan AI pack sudah terpasang sebelum menjalankan processing."
+      );
+      return;
+    }
+
     const toProcess = tiffList.filter((t) => t.checked).map((t) => t.path);
     if (toProcess.length === 0) {
       appendLog("Select at least one TIFF (checkbox) to process.");
@@ -532,7 +581,12 @@ export function Dashboard() {
                 <span className="inline-block">
                   <Button
                     onClick={run}
-                    disabled={running || !activeModelId || !someChecked}
+                    disabled={
+                      running ||
+                      !activeModelId ||
+                      !someChecked ||
+                      aiPackInstalled === false
+                    }
                     className="gap-2"
                   >
                     <Play className="h-4 w-4" />
@@ -545,7 +599,9 @@ export function Dashboard() {
                   ? "Select an active YOLO model first"
                   : !someChecked
                     ? "Select at least one TIFF to process"
-                    : "Process selected TIFFs with the active model"}
+                    : aiPackInstalled === false
+                      ? "Install / download AI pack terlebih dahulu"
+                      : "Process selected TIFFs with the active model"}
               </TooltipContent>
             </Tooltip>
           </CardContent>

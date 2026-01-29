@@ -88,7 +88,9 @@ export function AIPackBanner() {
     setErrorMsg(null);
     setStatus("downloading");
     invoke("start_download_ai_pack", {
-      base_url: apiUrl.trim(),
+      // Tauri v2: parameter Rust `base_url` diekspos ke JS sebagai `baseUrl`
+      // Di-hardcode sesuai nilai default / Postman collection jika user tidak mengubah input.
+      baseUrl: (apiUrl || DEFAULT_AI_PACK_API).trim(),
     }).catch((e) => {
       setStatus("error");
       setErrorMsg(String(e));

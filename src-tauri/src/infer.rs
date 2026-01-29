@@ -7,74 +7,91 @@ use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 // Helper untuk get infer_worker sidecar exe path (TANPA fallback ke Python).
+// Mengembalikan path exe jika ada (ukuran tidak dicek di sini; cx_Freeze exe kecil + banyak DLL).
 fn get_infer_worker_path() -> std::path::PathBuf {
-    // Try sidecar executable first
+    #[cfg(windows)]
+    let prod_names = ["infer_worker.exe", "infer_worker-x86_64-pc-windows-msvc.exe"];
+    #[cfg(not(windows))]
+    let prod_names: &[&str] = &[
+        "infer_worker",
+        "infer_worker-x86_64-unknown-linux-gnu",
+        "infer_worker-aarch64-apple-darwin",
+        "infer_worker-x86_64-apple-darwin",
+    ];
+
     if let Ok(exe) = std::env::current_exe() {
         if let Some(exe_dir) = exe.parent() {
-            // Check in src-tauri/binaries/ (dev mode)
+            // Dev: src-tauri/binaries/
             if let Some(target_dir) = exe_dir.parent() {
                 if let Some(src_tauri_dir) = target_dir.parent() {
                     let sidecar_bin = src_tauri_dir
                         .join("binaries")
                         .join("infer_worker-x86_64-pc-windows-msvc.exe");
-                    if sidecar_bin.exists() {
-                        if let Ok(metadata) = std::fs::metadata(&sidecar_bin) {
-                            if metadata.len() > 1_000_000 {
-                                return sidecar_bin;
-                            }
-                        }
+                    if sidecar_bin.is_file() {
+                        return sidecar_bin;
                     }
                 }
             }
 
-            // Check in same directory as executable (production – Tauri bundle)
-            #[cfg(windows)]
-            let prod_names = ["infer_worker.exe", "infer_worker-x86_64-pc-windows-msvc.exe"];
-            #[cfg(not(windows))]
-            let prod_names: &[&str] = &[
-                "infer_worker",
-                "infer_worker-x86_64-unknown-linux-gnu",
-                "infer_worker-aarch64-apple-darwin",
-                "infer_worker-x86_64-apple-darwin",
-            ];
+            // Production: sebelahan dengan exe
             for &name in prod_names.iter() {
                 let sidecar = exe_dir.join(name);
-                if sidecar.exists() {
-                    if let Ok(metadata) = std::fs::metadata(&sidecar) {
-                        if metadata.len() > 1_000_000 {
-                            return sidecar;
-                        }
-                    }
+                if sidecar.is_file() {
+                    return sidecar;
                 }
             }
-            // Check in subdirectory binaries (production – Tauri bundle)
+            // Production: subfolder binaries/
             let binaries_dir = exe_dir.join("binaries");
             if binaries_dir.is_dir() {
                 for &name in prod_names.iter() {
                     let sidecar_bin = binaries_dir.join(name);
-                    if sidecar_bin.exists() {
-                        if let Ok(metadata) = std::fs::metadata(&sidecar_bin) {
-                            if metadata.len() > 1_000_000 {
-                                return sidecar_bin;
-                            }
-                        }
+                    if sidecar_bin.is_file() {
+                        return sidecar_bin;
                     }
                 }
             }
         }
     }
 
-    // Default path (dipakai hanya untuk pesan error jika tidak ditemukan)
     std::path::PathBuf::from("src-tauri/binaries/infer_worker-x86_64-pc-windows-msvc.exe")
 }
 
-/// Returns true if a real AI pack sidecar (size > 1MB) is installed.
+/// Total size (bytes) of all files in dir (recursive).
+fn dir_total_size(path: &std::path::Path) -> u64 {
+    let mut total = 0u64;
+    if let Ok(entries) = path.read_dir() {
+        for e in entries.flatten() {
+            let p = e.path();
+            if p.is_dir() {
+                total += dir_total_size(&p);
+            } else if let Ok(m) = std::fs::metadata(&p) {
+                total += m.len();
+            }
+        }
+    }
+    total
+}
+
+/// Returns true if a real AI pack is installed:
+/// - Nuitka/PyInstaller: exe size > 1MB
+/// - cx_Freeze: exe + DLLs; exe bisa kecil, jadi cek total ukuran folder binaries > 50MB
 pub fn has_ai_pack_installed() -> bool {
     let path = get_infer_worker_path();
-    path.exists()
-        && std::fs::metadata(&path)
-            .map(|m| m.len() > 1_000_000)
-            .unwrap_or(false)
+    if !path.is_file() {
+        return false;
+    }
+    let exe_size = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+    if exe_size > 1_000_000 {
+        return true;
+    }
+    // cx_Freeze: exe kecil, deps di folder yang sama
+    if let Some(bin_dir) = path.parent() {
+        let total = dir_total_size(bin_dir);
+        if total > 50_000_000 {
+            return true;
+        }
+    }
+    false
 }
 
 /// Returns the path to the binaries folder where AI pack should be extracted (for production).

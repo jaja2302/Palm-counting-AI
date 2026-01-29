@@ -55,9 +55,12 @@ def make_zip(skip_build: bool = False) -> Path | None:
         return None
     DIST_DIR.mkdir(parents=True, exist_ok=True)
     zip_path = DIST_DIR / ZIP_NAME
-    # Zip isi binaries/ dengan struktur: binaries/infer_worker-*.exe
+    # Zip seluruh isi binaries/ (exe + DLL/deps untuk cx_Freeze, atau satu exe untuk Nuitka/PyInstaller)
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as zf:
-        zf.write(exe_path, f"binaries/{SIDECAR_EXE}")
+        for f in BINARIES_DIR.rglob("*"):
+            if f.is_file():
+                arcname = f"binaries/{f.relative_to(BINARIES_DIR).as_posix()}"
+                zf.write(f, arcname)
     print(f"AI pack dibuat: {zip_path}")
     return zip_path
 
