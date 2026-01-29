@@ -8,7 +8,8 @@ import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Download, Pause, Play, X } from "lucide-react";
 
-const DEFAULT_AI_PACK_API = "http://localhost:8765";
+const DEFAULT_AI_PACK_API =
+  (import.meta as any).env?.VITE_AI_PACK_API_URL ?? "http://192.168.1.34:8765";
 
 type DownloadStatus = "idle" | "downloading" | "paused" | "done" | "error";
 
@@ -20,7 +21,7 @@ interface ProgressPayload {
 
 export function AIPackBanner() {
   const [installed, setInstalled] = useState<boolean | null>(null);
-  const [apiUrl, setApiUrl] = useState(DEFAULT_AI_PACK_API);
+  const [apiUrl, setApiUrl] = useState<string>(DEFAULT_AI_PACK_API);
   const [status, setStatus] = useState<DownloadStatus>("idle");
   const [progress, setProgress] = useState<ProgressPayload>({
     downloaded: 0,
