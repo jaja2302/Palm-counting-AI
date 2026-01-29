@@ -3,8 +3,6 @@ import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Download, Pause, Play, X } from "lucide-react";
 
@@ -31,7 +29,6 @@ interface AIPackBannerProps {
 
 export function AIPackBanner({ initialAiPackInstalled = null }: AIPackBannerProps) {
   const [installed, setInstalled] = useState<boolean | null>(initialAiPackInstalled ?? null);
-  const [apiUrl, setApiUrl] = useState<string>(DEFAULT_AI_PACK_API);
   const [status, setStatus] = useState<DownloadStatus>("idle");
   const [progress, setProgress] = useState<ProgressPayload>({
     downloaded: 0,
@@ -130,9 +127,7 @@ export function AIPackBanner({ initialAiPackInstalled = null }: AIPackBannerProp
     setLogLines([]);
     setStatus("downloading");
     invoke("start_download_ai_pack", {
-      // Tauri v2: parameter Rust `base_url` diekspos ke JS sebagai `baseUrl`
-      // Di-hardcode sesuai nilai default / Postman collection jika user tidak mengubah input.
-      baseUrl: (apiUrl || DEFAULT_AI_PACK_API).trim(),
+      baseUrl: DEFAULT_AI_PACK_API.trim(),
     }).catch((e) => {
       setStatus("error");
       setErrorMsg(String(e));
@@ -169,20 +164,9 @@ export function AIPackBanner({ initialAiPackInstalled = null }: AIPackBannerProp
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-          <div className="flex-1 space-y-1">
-            <Label htmlFor="ai-pack-api">URL API AI pack</Label>
-            <Input
-              id="ai-pack-api"
-              value={apiUrl}
-              onChange={(e) => setApiUrl(e.target.value)}
-              placeholder={DEFAULT_AI_PACK_API}
-              disabled={status === "downloading"}
-              className="font-mono text-sm"
-            />
-          </div>
+        <div className="flex flex-wrap items-center gap-2">
           {status === "idle" || status === "error" ? (
-            <Button onClick={startDownload} disabled={!apiUrl.trim()}>
+            <Button onClick={startDownload}>
               <Download className="mr-2 h-4 w-4" />
               Download
             </Button>
