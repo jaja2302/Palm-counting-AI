@@ -1,6 +1,6 @@
 # API AI Pack – Palm Counting AI
 
-API Python untuk menyajikan **AI pack** (zip sidecar) dengan dukungan **pause/resume** download (Range).
+API hanya **menyajikan zip** untuk download. **Tidak ada build** di API. Build sidecar manual di server, lalu zip folder `binaries/`, jalankan API.
 
 ## Setup
 
@@ -12,44 +12,33 @@ pip install -r requirements.txt
 ## Menjalankan API
 
 ```bash
-# Pakai env untuk host/port (opsional)
-# AI_PACK_HOST=0.0.0.0  AI_PACK_PORT=8765
 python -m uvicorn main:app --host 0.0.0.0 --port 8765
 ```
 
-Atau langsung: `python main.py` (baca `AI_PACK_HOST` / `AI_PACK_PORT` atau `PORT`).
+Atau: `python main.py` (baca env `AI_PACK_HOST` / `AI_PACK_PORT` atau `PORT`).
 
-- **GET /info** – Info AI pack (ukuran, available). 404 jika pack belum ada.
-- **GET /download** – Download zip (mendukung `Range` untuk pause/resume).
-- **POST /build** – Build sidecar + zip (lama; untuk CI/server).
+- **GET /info** – Info AI pack (ukuran, available). 404 jika zip belum ada.
+- **GET /download** – Download zip (Range untuk pause/resume).
+- **POST /zip** – Buat ulang zip dari folder `src-tauri/binaries/` (opsional).
 
-## Membuat AI pack di server
+## Alur di server (simple)
 
-Di server, AI pack **harus dibuat sekali** sebelum `/info` dan `/download` bisa dipakai.
+1. **Build sidecar manual** (sekali, dari repo root):
+   - cx_Freeze: `python src-tauri/scripts/build_python_sidecar_cxfreeze.py`
+   - atau Nuitka: `npm run build:sidecar`
+   - atau PyInstaller: `python src-tauri/scripts/build_python_sidecar_pyinstaller.py`  
+   Hasil di `src-tauri/binaries/` (exe + DLL/deps).
 
-**Opsi A – Lewat API (setelah API jalan):**
+2. **Zip folder binaries** (sekali, atau setelah update binaries):
+   ```bash
+   cd API-AI-PACK-PALM-COUNTING
+   python build_and_zip.py
+   ```
+   Hasil: `dist/palm-counting-ai-pack-x64.zip`.
 
-```bash
-curl -X POST http://localhost:8765/build
-```
-
-API akan jalankan `npm run build:sidecar` di repo lalu zip ke `dist/`. Lama (~5–15 menit+ tergantung mesin).
-
-**Opsi B – Manual dari CLI (sebelum atau tanpa API):**
-
-```bash
-# Dari repo root
-npm run build:sidecar
-# atau PyInstaller: npm run build:sidecar:pyinstaller
-# lalu salin exe ke src-tauri/binaries/ jika perlu
-
-cd API-AI-PACK-PALM-COUNTING
-python build_and_zip.py --skip-build
-```
-
-Hasil: `dist/palm-counting-ai-pack-x64.zip`. Setelah itu jalankan API; GET /info dan GET /download akan melayani file ini.
+3. **Jalankan API** – hanya menyajikan zip untuk GET /info dan GET /download.
 
 ## Deploy
 
-- Di server: buat AI pack sekali (lihat **Membuat AI pack di server** di atas), lalu jalankan API.
-- Aplikasi Tauri memakai base URL API ini (mis. `http://your-server:8765`) untuk download AI pack saat pertama kali dibuka.
+- Di server: build sidecar manual → zip dengan `python build_and_zip.py` → jalankan API.
+- Aplikasi Tauri pakai base URL API ini untuk download AI pack saat pertama buka.

@@ -151,7 +151,7 @@ pub fn run_processing_files(
         .into());
     }
 
-    on_log("Starting processing with Python YOLO...");
+    on_log("Starting processing with infer_worker (sidecar)...");
     let config_json = serde_json::json!({
         "imgsz": config.imgsz,
         "conf": config.conf,

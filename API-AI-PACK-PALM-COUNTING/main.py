@@ -1,8 +1,9 @@
 """
 API untuk download AI pack Palm Counting AI.
-- GET /info  -> info ukuran, versi, dll
+Hanya menyajikan zip; tidak ada build. Build sidecar manual di server, lalu zip folder binaries/.
+- GET /info   -> info ukuran, versi
 - GET /download -> file zip (Accept-Ranges untuk pause/resume)
-- POST /build -> (opsional) build sidecar + zip
+- POST /zip   -> (opsional) buat ulang zip dari folder binaries/
 """
 import os
 from pathlib import Path
@@ -16,19 +17,15 @@ app = FastAPI(title="Palm Counting AI - AI Pack API", version="1.0.0")
 
 PACK_PATH = DIST_DIR / ZIP_NAME
 
-# Konfigurasi lewat environment variable
-# - AI_PACK_HOST (default: "0.0.0.0")
-# - AI_PACK_PORT (default: 8765, fallback ke PORT jika AI_PACK_PORT tidak ada)
 API_HOST = os.getenv("AI_PACK_HOST", "0.0.0.0")
 API_PORT = int(os.getenv("AI_PACK_PORT", os.getenv("PORT", "8765")))
 
 
 def ensure_pack() -> Path | None:
-    """Pastikan file zip ada; kalau belum, coba build (skip build, hanya zip jika binaries ada)."""
+    """Cek zip ada; kalau belum, coba buat dari binaries/ sekali."""
     if PACK_PATH.is_file():
         return PACK_PATH
-    # Coba zip saja dulu (tanpa build) kalau binaries sudah ada
-    if make_zip(skip_build=True):
+    if make_zip():
         return PACK_PATH
     return None
 
@@ -42,7 +39,7 @@ def info():
             status_code=404,
             content={
                 "available": False,
-                "message": "AI pack belum tersedia. Jalankan POST /build atau build_and_zip.py dulu.",
+                "message": "AI pack belum tersedia. Di server: zip folder binaries/ dengan python build_and_zip.py",
             },
         )
     size = path.stat().st_size
@@ -107,13 +104,13 @@ def download(request: Request):
     )
 
 
-@app.post("/build")
-def build():
-    """Build sidecar + zip (lama, untuk dijalankan manual atau CI)."""
+@app.post("/zip")
+def zip_pack():
+    """Buat ulang zip dari folder binaries/ (tanpa build). Berguna setelah kamu update binaries/ di server."""
     try:
-        out = make_zip(skip_build=False)
+        out = make_zip()
         if out is None:
-            return JSONResponse(status_code=500, content={"detail": "Build or zip failed"})
+            return JSONResponse(status_code=500, content={"detail": "Zip gagal. Pastikan folder src-tauri/binaries/ ada dan berisi sidecar exe."})
         return {"ok": True, "path": str(out), "filename": ZIP_NAME}
     except Exception as e:
         return JSONResponse(status_code=500, content={"detail": str(e)})

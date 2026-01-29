@@ -39,26 +39,17 @@
       }
     },
     {
-      "name": "Build AI Pack (sidecar + zip)",
+      "name": "Zip AI Pack (buat ulang zip dari folder binaries/)",
       "request": {
         "method": "POST",
-        "header": [
-          {
-            "key": "Content-Type",
-            "value": "application/json"
-          }
-        ],
-        "body": {
-          "mode": "raw",
-          "raw": "{}"
-        },
+        "header": [],
         "url": {
-          "raw": "{{base_url}}/build",
+          "raw": "{{base_url}}/zip",
           "host": [
             "{{base_url}}"
           ],
           "path": [
-            "build"
+            "zip"
           ]
         }
       }
