@@ -21,6 +21,16 @@ Atau: `python main.py` (baca env `AI_PACK_HOST` / `AI_PACK_PORT` atau `PORT`).
 - **GET /download** – Download zip (Range untuk pause/resume).
 - **POST /zip** – Buat ulang zip dari folder `src-tauri/binaries/` (opsional).
 
+## Download zip dari PC lain (tanpa Postman)
+
+Salin folder `API-AI-PACK-PALM-COUNTING` ke PC lain (atau minimal file `download_zip.py` + `pip install requests`). Set **IP server** tempat uvicorn jalan:
+
+1. **Edit di script**: buka `download_zip.py`, ubah baris `API_HOST = "10.9.116.125"` ke IP server (mis. `192.168.1.5`).
+2. Atau lewat arg: `python download_zip.py --host 192.168.1.5 --port 8765`
+3. Jalankan: `python download_zip.py`
+
+File zip tersimpan di `API-AI-PACK-PALM-COUNTING/dist/palm-counting-ai-pack-x64.zip`. Kecepatan tergantung jaringan; script pakai chunk 8 MB dan timeout 2 jam untuk file besar.
+
 ## Alur di server (simple)
 
 1. **Build sidecar manual** (sekali, dari repo root):
