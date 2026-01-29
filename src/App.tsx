@@ -18,6 +18,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { AIPackBanner } from "@/components/AIPackBanner";
 import { Dashboard, YoloModelPage, SettingsPage } from "@/pages";
 import { useConversionStore } from "@/stores/conversion";
 import {
@@ -280,6 +281,7 @@ export default function App() {
             <ThemeToggle />
           </div>
         </header>
+        <AIPackBanner />
         <Tabs defaultValue="dashboard" className="flex flex-1 flex-col">
           <TabsList className="h-11 w-full justify-start gap-0 rounded-none border-b bg-transparent px-4 py-0">
             <TabsTrigger

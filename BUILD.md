@@ -45,10 +45,30 @@ npm run build:sidecar:cxfreeze
 
 ### 3. Build Tauri App
 
+Sidecar di-include sesuai [Tauri doc](https://v2.tauri.app/develop/building/sidecar/): `externalBin: ["binaries/infer_worker"]` di `tauri.conf.json`. Karena file sidecar asli ~4–8 GB, **NSIS gagal** saat bundle; jadi untuk **build installer** pakai **placeholder** dulu (exe kecil):
+
 ```bash
 cd "Palm counting AI"
+npm run build:placeholder   # buat binaries/infer_worker-<target>.exe (kecil)
 npm run tauri build
 ```
+
+Atau satu perintah: `npm run tauri:build` (placeholder lalu tauri build).
+
+- **Installer:** berisi app + resources + **sidecar placeholder** (~beberapa KB). Di PC user, **AI tidak jalan** sampai salah satu di bawah.
+
+**Agar AI jalan di PC user (tanpa Python di PC):**
+1. Build sidecar sekali: `npm run build:sidecar` (atau PyInstaller/cx_Freeze).
+2. Distribusi dua bagian:
+   - **Installer:** `bundle/nsis/palm-counting-ai_*_x64-setup.exe` (~3 MB) — user install seperti biasa.
+   - **AI pack:** file `infer_worker-x86_64-pc-windows-msvc.exe` (hasil build:sidecar, ~4–8 GB). Host terpisah (Google Drive, release GitHub, dll).
+3. Di PC user: setelah install app, buat folder `binaries` di folder instalasi (satu tingkat dengan `palm-counting-ai.exe`), salin `infer_worker-x86_64-pc-windows-msvc.exe` ke dalamnya, lalu **rename** jadi `infer_worker.exe`. Setelah itu fitur AI jalan tanpa perlu Python.
+
+**Alternatif (dengan Python di PC user):**  
+Installer sudah bawa `python_ai/*.py`. User install Python + `pip install -r requirements.txt` dari folder resources app; app akan pakai skrip Python sebagai fallback (jika sidecar tidak ada).
+
+**Download AI pack dari dalam aplikasi (first-run):**  
+Saat aplikasi pertama kali dibuka, jika AI pack belum terpasang akan muncul banner dengan URL API. User bisa download langsung dari app (dengan progress, Jeda, Lanjutkan). API disediakan di folder `API-AI-PACK-PALM-COUNTING` (Python FastAPI): build sidecar + zip, lalu serve dengan dukungan **Range** untuk pause/resume. Lihat `API-AI-PACK-PALM-COUNTING/README.md`.
 
 ### Development Mode
 
@@ -70,15 +90,14 @@ npm run tauri dev
 ```
 
 **Catatan:**
-- Placeholder sidecar akan **otomatis dibuat** saat pertama kali run `npm run tauri:dev`
-- Placeholder hanya file kecil (~1KB) untuk memenuhi requirement Tauri `externalBin`
-- Untuk **production**, gunakan `npm run build:sidecar` untuk build sidecar yang sebenarnya
+- Placeholder sidecar akan **otomatis dibuat** saat pertama kali run `npm run tauri:dev` (untuk dev, app cari sidecar di `binaries/` atau fallback Python).
+- Untuk **production**, sidecar tidak ikut di installer; gunakan `npm run build:sidecar` lalu distribusi terpisah atau salin ke folder instalasi.
 
 ### 4. Hasil Build
 
 Setelah build selesai, hasilnya ada di:
 - **Windows:** `src-tauri/target/release/palm-counting-ai.exe`
-- **Installer:** `src-tauri/target/release/bundle/msi/palm-counting-ai_0.1.0_x64_en-US.msi`
+- **Installer (NSIS):** `src-tauri/target/release/bundle/nsis/palm-counting-ai_1.1.23_x64-setup.exe`
 
 ## Struktur Sidecar
 
@@ -107,9 +126,9 @@ src-tauri/
 4. **Inference menggunakan Rust ONNX** - tidak perlu Python untuk inference
 
 ### Production Mode (Sidecar)
-1. Rust mencari `binaries/infer_worker-<target>.exe`
-2. Menjalankan executable langsung (tidak perlu Python)
-3. Semua dependencies sudah dibundle di dalam executable
+1. Rust mencari `infer_worker.exe` di folder exe atau `binaries/` (jika user sudah menyalin sidecar ke sana).
+2. Jika tidak ada, fallback ke skrip Python di resources (`python_ai/infer_worker.py`) jika Python terinstall.
+3. Sidecar tidak lagi dibundle di installer karena ukuran (~4 GB); distribusi terpisah atau salin manual.
 
 ## Troubleshooting
 
@@ -122,9 +141,12 @@ src-tauri/
 - Atau gunakan sidecar (build dengan `build_python_sidecar.py`)
 
 ### Sidecar tidak ditemukan saat runtime
-- Pastikan `externalBin` di `tauri.conf.json` sudah benar
-- Pastikan file sidecar ada di `src-tauri/binaries/` dengan nama yang benar
-- Nama harus sesuai target triple: `infer_worker-<target-triple>.exe`
+- **Dev:** file sidecar di `src-tauri/binaries/` (nama: `infer_worker-<target-triple>.exe`) atau gunakan fallback Python.
+- **Production:** salin hasil `build:sidecar` ke folder instalasi (subfolder `binaries/` atau sama folder dengan exe), atau andalkan fallback Python.
+
+### Error: "failed to run light.exe" (MSI / WiX)
+Jika Anda build **MSI** (`"targets": "msi"` atau `"all"`) dan dapat error ini, menurut [Tauri Windows Installer doc](https://v2.tauri.app/develop/building/windows/): build MSI membutuhkan **VBScript** di Windows. Aktifkan lewat: **Settings → Apps → Optional features → More Windows features** → centang **Windows Script Host** / VBScript. Setelah itu coba `npm run tauri build` lagi.  
+Proyek ini memakai **NSIS** saja (`"targets": ["nsis"]`) agar build selalu jalan; MSI juga bisa gagal jika sidecar terlalu besar (~4 GB).
 
 ## Ukuran Build
 

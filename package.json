@@ -15,7 +15,7 @@
     "build:full": "npm run build:sidecar && npm run tauri build",
     "build:prod": "npm run build:sidecar && npm run tauri build",
     "tauri:dev": "npm run build:placeholder && npm run tauri dev",
-    "tauri:build": "npm run tauri build",
+    "tauri:build": "npm run build:placeholder && npm run tauri build",
     "predev": "npm run build:placeholder",
     "pretauri:dev": "npm run build:placeholder"
   },

@@ -1,3 +1,4 @@
+mod aipack;
 mod config;
 mod infer;
 mod specs;
@@ -297,6 +298,10 @@ pub fn run() {
             remove_tiff_path_cmd,
             run_processing_cmd,
             cancel_processing,
+            aipack::check_ai_pack_installed,
+            aipack::get_ai_pack_path,
+            aipack::start_download_ai_pack,
+            aipack::pause_download_ai_pack,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

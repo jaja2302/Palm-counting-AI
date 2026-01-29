@@ -13,18 +13,17 @@ Uses `python_ai/infer_worker.py` (placeholder sidecar).
 
 ## Production build
 
-**Sidecar Python harus di-build dulu**, lalu Tauri bundle:
+- **Installer (~3 MB)** hanya berisi app; **AI tidak jalan** di PC user kecuali ada sidecar atau Python.
+- Agar **AI jalan tanpa Python** di PC user: distribusi dua bagian (lihat BUILD.md).
 
 ```bash
-npm run build:prod
+npm run tauri build
 ```
 
-Atau step manual:
+Output: `src-tauri/target/release/bundle/nsis/palm-counting-ai_*_x64-setup.exe`.
 
-1. `npm run build:sidecar` — Nuitka bundle `infer_worker.py` ke `src-tauri/binaries/`
-2. `npm run tauri build` — build app + bundle sidecar
-
-Output installer: `src-tauri/target/release/bundle/`.
+**Untuk PC user (AI jalan tanpa Python):**  
+Sediakan juga "AI pack": hasil `npm run build:sidecar` (file exe ~4–8 GB). User install app dulu, lalu salin `infer_worker-x86_64-pc-windows-msvc.exe` ke folder instalasi → subfolder `binaries/` → rename jadi `infer_worker.exe`. Detail di BUILD.md.
 
 ## Recommended IDE
 

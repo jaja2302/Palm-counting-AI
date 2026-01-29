@@ -23,6 +23,10 @@ dist-ssr
 *.sln
 *.sw?
 
+# API AI Pack (zip output)
+API-AI-PACK-PALM-COUNTING/dist/
+API-AI-PACK-PALM-COUNTING/__pycache__/
+
 # PyInstaller build artifacts
 **/python_ai/build/
 **/python_ai/dist/

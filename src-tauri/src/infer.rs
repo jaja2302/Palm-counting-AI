@@ -25,22 +25,32 @@ fn get_infer_worker_path() -> (std::path::PathBuf, bool) {
                 }
             }
             
-            // Check in same directory as executable (production)
-            let sidecar = exe_dir.join("infer_worker.exe");
-            if sidecar.exists() {
-                if let Ok(metadata) = std::fs::metadata(&sidecar) {
-                    if metadata.len() > 1_000_000 {
-                        return (sidecar, false);
+            // Check in same directory as executable (production – Tauri bundle)
+            #[cfg(windows)]
+            let prod_names = ["infer_worker.exe", "infer_worker-x86_64-pc-windows-msvc.exe"];
+            #[cfg(not(windows))]
+            let prod_names: &[&str] = &["infer_worker", "infer_worker-x86_64-unknown-linux-gnu", "infer_worker-aarch64-apple-darwin", "infer_worker-x86_64-apple-darwin"];
+            for &name in prod_names.iter() {
+                let sidecar = exe_dir.join(name);
+                if sidecar.exists() {
+                    if let Ok(metadata) = std::fs::metadata(&sidecar) {
+                        if metadata.len() > 1_000_000 {
+                            return (sidecar, false);
+                        }
                     }
                 }
             }
-            
-            // Check in subdirectory binaries (production)
-            let sidecar_bin = exe_dir.join("binaries").join("infer_worker.exe");
-            if sidecar_bin.exists() {
-                if let Ok(metadata) = std::fs::metadata(&sidecar_bin) {
-                    if metadata.len() > 1_000_000 {
-                        return (sidecar_bin, false);
+            // Check in subdirectory binaries (production – Tauri bundle)
+            let binaries_dir = exe_dir.join("binaries");
+            if binaries_dir.is_dir() {
+                for &name in prod_names.iter() {
+                    let sidecar_bin = binaries_dir.join(name);
+                    if sidecar_bin.exists() {
+                        if let Ok(metadata) = std::fs::metadata(&sidecar_bin) {
+                            if metadata.len() > 1_000_000 {
+                                return (sidecar_bin, false);
+                            }
+                        }
                     }
                 }
             }
@@ -78,6 +88,23 @@ fn get_infer_worker_path() -> (std::path::PathBuf, bool) {
     
     // Default path
     (std::path::PathBuf::from("src-tauri/python_ai/infer_worker.py"), true)
+}
+
+/// Returns true if a real AI pack sidecar (size > 1MB) is installed.
+pub fn has_ai_pack_installed() -> bool {
+    let (path, use_python) = get_infer_worker_path();
+    if use_python {
+        return false;
+    }
+    path.exists()
+        && std::fs::metadata(&path).map(|m| m.len() > 1_000_000).unwrap_or(false)
+}
+
+/// Returns the path to the binaries folder where AI pack should be extracted (for production).
+pub fn get_ai_pack_binaries_path() -> Option<std::path::PathBuf> {
+    std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(|p| p.join("binaries")))
 }
 
 #[derive(Clone, serde::Serialize)]
