@@ -40,6 +40,7 @@ export function AIPackBanner() {
     percent: 0,
   });
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [logLines, setLogLines] = useState<string[]>([]);
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
@@ -93,6 +94,14 @@ export function AIPackBanner() {
       });
       unsubs.push(u);
 
+      u = await listen<{ message?: string }>("ai-pack-log", (e) => {
+        if (!cancelled) {
+          const msg = e.payload?.message ?? (typeof e.payload === "string" ? e.payload : JSON.stringify(e.payload));
+          setLogLines((prev) => [...prev, msg]);
+        }
+      });
+      unsubs.push(u);
+
       u = await listen<string>("ai-pack-error", (e) => {
         if (!cancelled) {
           setStatus("error");
@@ -110,6 +119,7 @@ export function AIPackBanner() {
 
   const startDownload = () => {
     setErrorMsg(null);
+    setLogLines([]);
     setStatus("downloading");
     invoke("start_download_ai_pack", {
       // Tauri v2: parameter Rust `base_url` diekspos ke JS sebagai `baseUrl`
@@ -210,7 +220,19 @@ export function AIPackBanner() {
           </p>
         )}
         {status === "error" && errorMsg && (
-          <p className="text-sm text-destructive">{errorMsg}</p>
+          <div className="space-y-2">
+            <p className="text-sm text-destructive">{errorMsg}</p>
+            {logLines.length > 0 && (
+              <details className="text-xs">
+                <summary className="cursor-pointer text-muted-foreground hover:underline">
+                  Log lengkap ({logLines.length} baris)
+                </summary>
+                <pre className="mt-1 max-h-32 overflow-auto rounded border bg-muted/50 p-2 font-mono text-muted-foreground">
+                  {logLines.join("\n")}
+                </pre>
+              </details>
+            )}
+          </div>
         )}
       </CardContent>
     </Card>

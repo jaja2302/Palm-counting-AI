@@ -9,6 +9,11 @@ fn app_dir() -> PathBuf {
         .join("palm-counting-ai")
 }
 
+/// Folder untuk AI pack (sidecar binaries), sama level dengan models/ dan database.db.
+pub(crate) fn app_data_binaries_dir() -> PathBuf {
+    app_dir().join("binaries")
+}
+
 fn db_path() -> PathBuf {
     app_dir().join("database.db")
 }

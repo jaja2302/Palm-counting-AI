@@ -10,15 +10,6 @@
     "opener:default",
     "opener:allow-open-path",
     "dialog:default",
-    "notification:default",
-    {
-      "identifier": "shell:allow-spawn",
-      "allow": [
-        {
-          "name": "binaries/infer_worker",
-          "sidecar": true
-        }
-      ]
-    }
+    "notification:default"
   ]
 }

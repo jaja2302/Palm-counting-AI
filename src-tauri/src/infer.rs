@@ -8,6 +8,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 // Helper untuk get infer_worker sidecar exe path (TANPA fallback ke Python).
 // Mengembalikan path exe jika ada (ukuran tidak dicek di sini; cx_Freeze exe kecil + banyak DLL).
+// Urutan: AppData Local (palm-counting-ai/binaries) → Dev (src-tauri/binaries) → sebelah exe → exe/binaries.
 fn get_infer_worker_path() -> std::path::PathBuf {
     #[cfg(windows)]
     let prod_names = ["infer_worker.exe", "infer_worker-x86_64-pc-windows-msvc.exe"];
@@ -18,6 +19,17 @@ fn get_infer_worker_path() -> std::path::PathBuf {
         "infer_worker-aarch64-apple-darwin",
         "infer_worker-x86_64-apple-darwin",
     ];
+
+    // AppData Local: palm-counting-ai/binaries/ (sama seperti models/ dan database.db)
+    let app_bin = crate::config::app_data_binaries_dir();
+    if app_bin.is_dir() {
+        for &name in prod_names.iter() {
+            let sidecar_bin = app_bin.join(name);
+            if sidecar_bin.is_file() {
+                return sidecar_bin;
+            }
+        }
+    }
 
     if let Ok(exe) = std::env::current_exe() {
         if let Some(exe_dir) = exe.parent() {
@@ -40,7 +52,7 @@ fn get_infer_worker_path() -> std::path::PathBuf {
                     return sidecar;
                 }
             }
-            // Production: subfolder binaries/
+            // Production: subfolder binaries/ di samping exe
             let binaries_dir = exe_dir.join("binaries");
             if binaries_dir.is_dir() {
                 for &name in prod_names.iter() {
@@ -56,8 +68,8 @@ fn get_infer_worker_path() -> std::path::PathBuf {
     std::path::PathBuf::from("src-tauri/binaries/infer_worker-x86_64-pc-windows-msvc.exe")
 }
 
-/// Total size (bytes) of all files in dir (recursive).
-fn dir_total_size(path: &std::path::Path) -> u64 {
+/// Total size (bytes) of all files in dir (recursive). Public for aipack validation.
+pub(crate) fn dir_total_size(path: &std::path::Path) -> u64 {
     let mut total = 0u64;
     if let Ok(entries) = path.read_dir() {
         for e in entries.flatten() {
@@ -74,7 +86,7 @@ fn dir_total_size(path: &std::path::Path) -> u64 {
 
 /// Returns true if a real AI pack is installed:
 /// - Nuitka/PyInstaller: exe size > 1MB
-/// - cx_Freeze: exe + DLLs; exe bisa kecil, jadi cek total ukuran folder binaries > 50MB
+/// - cx_Freeze: exe + DLLs; exe bisa kecil, jadi cek total ukuran folder binaries > 5MB
 pub fn has_ai_pack_installed() -> bool {
     let path = get_infer_worker_path();
     if !path.is_file() {
@@ -84,21 +96,20 @@ pub fn has_ai_pack_installed() -> bool {
     if exe_size > 1_000_000 {
         return true;
     }
-    // cx_Freeze: exe kecil, deps di folder yang sama
+    // cx_Freeze: exe kecil, deps di folder yang sama (~8MB+ khas)
     if let Some(bin_dir) = path.parent() {
         let total = dir_total_size(bin_dir);
-        if total > 50_000_000 {
+        if total > 5_000_000 {
             return true;
         }
     }
     false
 }
 
-/// Returns the path to the binaries folder where AI pack should be extracted (for production).
+/// Returns the path to the binaries folder where AI pack should be extracted.
+/// Sama seperti models/ dan database.db: AppData Local palm-counting-ai/binaries/.
 pub fn get_ai_pack_binaries_path() -> Option<std::path::PathBuf> {
-    std::env::current_exe()
-        .ok()
-        .and_then(|exe| exe.parent().map(|p| p.join("binaries")))
+    Some(crate::config::app_data_binaries_dir())
 }
 
 #[derive(Clone, serde::Serialize)]

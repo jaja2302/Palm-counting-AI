@@ -68,7 +68,7 @@ async fn do_download(window: &tauri::Window, base_url: &str) -> Result<(), Strin
         return Err(format!("Download gagal: {}", status));
     }
 
-    let content_length = response
+    let _content_length = response
         .content_length()
         .or_else(|| {
             response
@@ -158,19 +158,58 @@ async fn do_download(window: &tauri::Window, base_url: &str) -> Result<(), Strin
                 serde_json::json!({
                     "current": extracted,
                     "total": total_entries,
-                    "percent": if total_entries > 0 { (extracted as f64 / total_entries as f64 * 100.0).round() } else { 100 }
+                    "percent": if total_entries > 0 { (extracted as f64 / total_entries as f64 * 100.0).round() } else { 100.0 }
                 }),
             );
         }
     }
     std::fs::remove_file(&zip_path).ok();
 
-    // Hanya emit "siap dipakai" jika exe yang ter-extract benar-benar AI pack (size > 1MB).
-    if !crate::infer::has_ai_pack_installed() {
-        return Err(
-            "File yang didownload bukan AI pack valid (ukuran terlalu kecil). Pastikan server menyajikan zip hasil build sidecar yang sebenarnya."
-                .to_string(),
+    // Validasi folder yang benar-benar kita ekstrak (bukan path lain yang dipakai has_ai_pack_installed di dev).
+    const MIN_SIZE_BYTES: u64 = 5_000_000; // 5 MB
+    #[cfg(windows)]
+    let exe_names = ["infer_worker.exe", "infer_worker-x86_64-pc-windows-msvc.exe"];
+    #[cfg(not(windows))]
+    let exe_names = ["infer_worker", "infer_worker-x86_64-unknown-linux-gnu", "infer_worker-aarch64-apple-darwin", "infer_worker-x86_64-apple-darwin"];
+
+    let extracted_size = crate::infer::dir_total_size(&binaries_path);
+    let exe_found = exe_names
+        .iter()
+        .any(|name| binaries_path.join(name).is_file());
+
+    let path_str = binaries_path.display().to_string();
+    let size_mb = extracted_size as f64 / 1_000_000.0;
+    let _ = window.emit(
+        "ai-pack-log",
+        serde_json::json!({
+            "message": format!(
+                "Validasi: folder={}, ukuran={} bytes ({:.2} MB), exe_ada={}, minimum=5 MB",
+                path_str, extracted_size, size_mb, exe_found
+            ),
+            "path": path_str,
+            "size_bytes": extracted_size,
+            "size_mb": size_mb,
+            "threshold_mb": 5,
+            "exe_found": exe_found,
+        }),
+    );
+
+    let valid = extracted_size > MIN_SIZE_BYTES && exe_found;
+    if !valid {
+        let reason = if !exe_found {
+            "infer_worker exe tidak ditemukan di folder extract"
+        } else {
+            "ukuran folder extract di bawah 5 MB"
+        };
+        let detail = format!(
+            "Folder: {} | Ukuran: {} bytes ({:.2} MB) | Minimum: 5 MB | Penyebab: {}",
+            path_str, extracted_size, size_mb, reason
         );
+        let _ = window.emit("ai-pack-log", serde_json::json!({ "message": detail }));
+        return Err(format!(
+            "File yang didownload bukan AI pack valid. {}",
+            detail
+        ));
     }
 
     let _ = window.emit("ai-pack-done", ());
