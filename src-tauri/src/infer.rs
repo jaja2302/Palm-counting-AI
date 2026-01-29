@@ -16,8 +16,7 @@ fn is_real_sidecar(path: &std::path::Path) -> bool {
     meta.len() >= MIN_SIDECAR_EXE_SIZE
 }
 
-// Helper untuk get infer_worker sidecar exe path (TANPA fallback ke Python).
-// Urutan: Dev (src-tauri/binaries) & production dulu, AppData terakhir — untuk testing pakai folder binaries di project.
+// Helper untuk get infer_worker sidecar exe path. Hanya dari AppData Local (palm-counting-ai/binaries/).
 fn get_infer_worker_path() -> std::path::PathBuf {
     #[cfg(windows)]
     let prod_names = ["infer_worker.exe", "infer_worker-x86_64-pc-windows-msvc.exe"];
@@ -29,49 +28,6 @@ fn get_infer_worker_path() -> std::path::PathBuf {
         "infer_worker-x86_64-apple-darwin",
     ];
 
-    // 1) Dev: src-tauri/binaries, binaries_cx_Freeze, binaries_pyinstaller — testing mana yang works
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(exe_dir) = exe.parent() {
-            if let Some(target_dir) = exe_dir.parent() {
-                if let Some(src_tauri_dir) = target_dir.parent() {
-                    // let dev_bin_dirs = ["binaries", "binaries_cx_Freeze", "binaries_pyinstaller"];
-                    let dev_bin_dirs = ["binaries_cx_Freeze"];
-                    for &bin_dir in dev_bin_dirs.iter() {
-                        let bin_path = src_tauri_dir.join(bin_dir);
-                        if !bin_path.is_dir() {
-                            continue;
-                        }
-                        for &name in prod_names.iter() {
-                            let sidecar_bin = bin_path.join(name);
-                            if sidecar_bin.is_file() && is_real_sidecar(&sidecar_bin) {
-                                return sidecar_bin;
-                            }
-                        }
-                    }
-                }
-            }
-
-            // 2) Production: sebelahan dengan exe
-            for &name in prod_names.iter() {
-                let sidecar = exe_dir.join(name);
-                if sidecar.is_file() && is_real_sidecar(&sidecar) {
-                    return sidecar;
-                }
-            }
-            // 3) Production: subfolder binaries/ di samping exe
-            let binaries_dir = exe_dir.join("binaries");
-            if binaries_dir.is_dir() {
-                for &name in prod_names.iter() {
-                    let sidecar_bin = binaries_dir.join(name);
-                    if sidecar_bin.is_file() && is_real_sidecar(&sidecar_bin) {
-                        return sidecar_bin;
-                    }
-                }
-            }
-        }
-    }
-
-    // 4) AppData Local: palm-counting-ai/binaries/ — fallback (copy-paste ke sini nanti kalau perlu)
     let app_bin = crate::config::app_data_binaries_dir();
     if app_bin.is_dir() {
         for &name in prod_names.iter() {
@@ -82,7 +38,8 @@ fn get_infer_worker_path() -> std::path::PathBuf {
         }
     }
 
-    std::path::PathBuf::from("src-tauri/binaries/infer_worker-x86_64-pc-windows-msvc.exe")
+    // Fallback dummy path untuk pesan error (exe tetap tidak ada)
+    app_bin.join(prod_names[0])
 }
 
 /// Total size (bytes) of all files in dir (recursive). Public for aipack validation.
@@ -101,32 +58,15 @@ pub(crate) fn dir_total_size(path: &std::path::Path) -> u64 {
     total
 }
 
-/// Returns true if AI pack sudah terpasang: folder AppData binaries ada dan ada isinya.
-/// Simple: jika folder ada dan total ukuran > 0 = sudah download/terpasang.
+/// Returns true if AI pack sudah terpasang: folder AppData binaries ada dan ada isinya (exe sidecar).
+/// Jika folder tidak ada = belum download AI pack dari server.
 pub fn has_ai_pack_installed() -> bool {
     let app_bin = crate::config::app_data_binaries_dir();
-    if app_bin.is_dir() {
-        let total = dir_total_size(&app_bin);
-        if total > 0 {
-            return true;
-        }
-    }
-    // Fallback: cek sidecar di lokasi dev/production (exe asli >= 100KB atau folder > 5MB)
-    let path = get_infer_worker_path();
-    if !path.is_file() {
+    if !app_bin.is_dir() {
         return false;
     }
-    let exe_size = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
-    if exe_size > 1_000_000 {
-        return true;
-    }
-    if let Some(bin_dir) = path.parent() {
-        let total = dir_total_size(bin_dir);
-        if total > 5_000_000 {
-            return true;
-        }
-    }
-    false
+    let path = get_infer_worker_path();
+    path.is_file() && is_real_sidecar(&path)
 }
 
 /// Returns the path to the binaries folder where AI pack should be extracted.
@@ -177,15 +117,21 @@ pub fn run_processing_files(
     if !model_path_buf.is_file() {
         return Err(format!("Model file not found: {}", model_path).into());
     }
+    let app_bin = crate::config::app_data_binaries_dir();
+    if !app_bin.is_dir() {
+        return Err(
+            "AI pack belum didownload dari server. Download AI pack terlebih dahulu dari aplikasi."
+                .into(),
+        );
+    }
     let worker_path = get_infer_worker_path();
     if !worker_path.exists() {
-        let app_bin = crate::config::app_data_binaries_dir();
         #[cfg(windows)]
         let exe_name = "infer_worker-x86_64-pc-windows-msvc.exe";
         #[cfg(not(windows))]
         let exe_name = "infer_worker (sesuai target triple)";
         return Err(format!(
-            "infer_worker tidak ditemukan. Build: npm run build:sidecar:cxfreeze, lalu salin isi folder src-tauri/binaries ke {} (pastikan ada file {} di dalamnya, bukan placeholder 98 byte)",
+            "infer_worker tidak ditemukan di {}. Pastikan AI pack berisi file {} (bukan placeholder).",
             app_bin.display(),
             exe_name
         )
