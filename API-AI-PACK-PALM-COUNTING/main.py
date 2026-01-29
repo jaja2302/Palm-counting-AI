@@ -22,11 +22,14 @@ API_PORT = int(os.getenv("AI_PACK_PORT", os.getenv("PORT", "8765")))
 
 
 def ensure_pack() -> Path | None:
-    """Zip ada → pakai. Belum ada → coba buat dari ../src-tauri/binaries/."""
-    if PACK_PATH.is_file():
+    """Zip ada dan wajar (≥ 1 MB) → pakai. Kecil atau belum ada → buat dari ../src-tauri/binaries/."""
+    if PACK_PATH.is_file() and PACK_PATH.stat().st_size >= 1_000_000:
         return PACK_PATH
+    # Zip belum ada atau masih kecil (sisa lama) → timpa dari folder binaries/
     if make_zip():
         return PACK_PATH
+    if PACK_PATH.is_file():
+        return PACK_PATH  # tetap sajikan yang ada
     return None
 
 
